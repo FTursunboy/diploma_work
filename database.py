@@ -1,8 +1,10 @@
 from collections.abc import Generator
 from datetime import datetime
 from pathlib import Path
+import os
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy.dialects import mysql as mysql_dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
 
@@ -15,8 +17,17 @@ DATABASE_PATH = DB_DIR / "books.db"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DB_DIR.mkdir(parents=True, exist_ok=True)
 
-engine = create_engine(f"sqlite:///{DATABASE_PATH}", connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# If DATABASE_URL is set (for example, postgres via docker), use it.
+# Otherwise, fallback to local SQLite file used before.
+if DATABASE_URL:
+    # Use the provided URL (container will install psycopg2-binary)
+    engine = create_engine(DATABASE_URL)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+else:
+    engine = create_engine(f"sqlite:///{DATABASE_PATH}", connect_args={"check_same_thread": False})
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 class Base(DeclarativeBase):
@@ -30,9 +41,16 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_type: Mapped[str] = mapped_column(String(10), nullable=False)
     stored_path: Mapped[str] = mapped_column(String(500), nullable=False)
-    full_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # full_text can be very large; use MEDIUMTEXT on MySQL to avoid "Data too long" errors
+    full_text: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
     status: Mapped[str] = mapped_column(String(20), default="uploaded", nullable=False)
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     paragraphs: Mapped[list["Paragraph"]] = relationship(

@@ -11,3 +11,22 @@ services:
       - "8000:8000"
     volumes:
       - ./storage:/app/storage
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=mysql+pymysql://bookuser:bookpass@db:3306/books
+
+  db:
+    image: mysql:8.1
+    container_name: book-parser-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: books
+      MYSQL_USER: bookuser
+      MYSQL_PASSWORD: bookpass
+      MYSQL_ROOT_PASSWORD: rootpass
+    command: --default-authentication-plugin=mysql_native_password
+    volumes:
+      - ./storage/mysql/data:/var/lib/mysql
+    ports:
+      - "3307:3306"
