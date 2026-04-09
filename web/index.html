@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="tg">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Book Parser — Веб</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260409" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="brand">
+          <div class="brand__mark" aria-hidden="true">BP</div>
+          <div class="brand__text">
+            <div class="brand__title">Book Parser</div>
+            <div class="brand__subtitle">Боргузорӣ, таҳлил ва ҷустуҷӯ дар файлҳо</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel">
+        <div class="panel__header">
+          <h2 class="panel__title">Файлҳо</h2>
+          <div class="panel__hint" id="docsMeta">—</div>
+        </div>
+
+        <div class="stack">
+          <label class="field">
+            <span class="field__label">Ҷустуҷӯ аз рӯи ном</span>
+            <input id="docFilter" class="input" placeholder="Масалан: китоб.docx" autocomplete="off" />
+          </label>
+
+          <form id="uploadForm" class="card">
+            <div class="card__title">Илова кардани файл</div>
+            <div class="card__body">
+              <input id="uploadFile" class="file" type="file" accept=".pdf,.docx" />
+              <button id="uploadBtn" class="btn btn--primary" type="submit">Боргузорӣ</button>
+              <div class="muted">PDF ва DOCX дастгирӣ мешаванд</div>
+            </div>
+          </form>
+
+          <div id="docsList" class="list" aria-label="Рӯйхати файлҳо"></div>
+        </div>
+      </aside>
+
+      <section class="panel">
+        <div class="panel__header">
+          <h2 class="panel__title">Ҷустуҷӯ</h2>
+          <div class="panel__hint">Дар ҳамаи файлҳо ё дар файли интихобшуда</div>
+        </div>
+
+        <form id="searchForm" class="search">
+          <label class="field search__query">
+            <span class="field__label">Дархост</span>
+            <input
+              id="searchQuery"
+              class="input"
+              placeholder="Калимаро ё ибораро ворид кунед…"
+              autocomplete="off"
+              required
+              minlength="1"
+            />
+          </label>
+
+          <label class="field">
+            <span class="field__label">Намуд</span>
+            <select id="searchTarget" class="select">
+              <option value="phrase" selected>Ибора (ҷумла + банд)</option>
+              <option value="word">Калима</option>
+              <option value="sentence">Ҷумла</option>
+              <option value="paragraph">Банд</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field__label">Файл</span>
+            <select id="searchDocument" class="select">
+              <option value="" selected>Ҳамаи файлҳо</option>
+            </select>
+          </label>
+
+          <label class="check" id="exactWrap">
+            <input id="searchExact" type="checkbox" />
+            <span>Мутобиқати дақиқ (барои «Калима»)</span>
+          </label>
+
+          <button id="searchBtn" class="btn btn--primary" type="submit">Ҷустуҷӯ</button>
+        </form>
+
+        <div class="split">
+          <section class="card">
+            <div class="card__title">Натиҷаҳо</div>
+            <div class="card__body">
+              <div id="resultsMeta" class="muted">—</div>
+              <div id="resultsList" class="results" aria-label="Натиҷаҳои ҷустуҷӯ"></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__title">
+              Файл
+              <span id="docTitle" class="card__title-muted">—</span>
+            </div>
+            <div class="card__body">
+              <div id="docStats" class="stats"></div>
+              <div class="tabs" role="tablist" aria-label="Маълумоти файл">
+                <button class="tab is-active" type="button" data-tab="text">Матн</button>
+                <button class="tab" type="button" data-tab="paragraphs">Бандҳо</button>
+                <button class="tab" type="button" data-tab="sentences">Ҷумлаҳо</button>
+                <button class="tab" type="button" data-tab="words">Калимаҳо</button>
+              </div>
+              <div id="docBody" class="doc" aria-label="Мундариҷаи файл">
+                <div class="placeholder">Файлро аз рӯйхати чап интихоб кунед.</div>
+              </div>
+              <div class="row row--end">
+                <button id="downloadBtn" class="btn" type="button" disabled>Зеркашӣ</button>
+                <button id="deleteBtn" class="btn btn--danger" type="button" disabled>Нест кардан</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/static/app.js?v=20260409"></script>
+  </body>
+</html>

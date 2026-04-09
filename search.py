@@ -18,7 +18,12 @@ def _result_row(
     }
 
 
-def search_word(db: Session, query: str, exact: bool = False) -> list[dict[str, int | str | None]]:
+def search_word(
+    db: Session,
+    query: str,
+    exact: bool = False,
+    document_id: int | None = None,
+) -> list[dict[str, int | str | None]]:
     normalized = query.strip()
     if not normalized:
         return []
@@ -38,6 +43,8 @@ def search_word(db: Session, query: str, exact: bool = False) -> list[dict[str, 
         .where(condition)
         .order_by(Document.filename, Paragraph.paragraph_index, Sentence.sentence_index, Word.word_index)
     )
+    if document_id is not None:
+        statement = statement.where(Document.id == document_id)
     rows = db.execute(statement).all()
     return [
         _result_row(document_id, word, paragraph_index, sentence_index)
@@ -45,7 +52,11 @@ def search_word(db: Session, query: str, exact: bool = False) -> list[dict[str, 
     ]
 
 
-def search_sentence(db: Session, query: str) -> list[dict[str, int | str | None]]:
+def search_sentence(
+    db: Session,
+    query: str,
+    document_id: int | None = None,
+) -> list[dict[str, int | str | None]]:
     normalized = query.strip()
     if not normalized:
         return []
@@ -57,6 +68,8 @@ def search_sentence(db: Session, query: str) -> list[dict[str, int | str | None]
         .where(Sentence.text.ilike(f"%{normalized}%"))
         .order_by(Document.filename, Paragraph.paragraph_index, Sentence.sentence_index)
     )
+    if document_id is not None:
+        statement = statement.where(Document.id == document_id)
     rows = db.execute(statement).all()
     return [
         _result_row(document_id, text, paragraph_index, sentence_index)
@@ -64,7 +77,11 @@ def search_sentence(db: Session, query: str) -> list[dict[str, int | str | None]
     ]
 
 
-def search_paragraph(db: Session, query: str) -> list[dict[str, int | str | None]]:
+def search_paragraph(
+    db: Session,
+    query: str,
+    document_id: int | None = None,
+) -> list[dict[str, int | str | None]]:
     normalized = query.strip()
     if not normalized:
         return []
@@ -75,6 +92,8 @@ def search_paragraph(db: Session, query: str) -> list[dict[str, int | str | None
         .where(Paragraph.text.ilike(f"%{normalized}%"))
         .order_by(Document.filename, Paragraph.paragraph_index)
     )
+    if document_id is not None:
+        statement = statement.where(Document.id == document_id)
     rows = db.execute(statement).all()
     return [
         _result_row(document_id, text, paragraph_index, None)
@@ -82,17 +101,21 @@ def search_paragraph(db: Session, query: str) -> list[dict[str, int | str | None
     ]
 
 
-def search_phrase(db: Session, query: str) -> list[dict[str, int | str | None]]:
+def search_phrase(
+    db: Session,
+    query: str,
+    document_id: int | None = None,
+) -> list[dict[str, int | str | None]]:
     normalized = query.strip()
     if not normalized:
         return []
 
     results: list[dict[str, int | str | None]] = []
 
-    for item in search_sentence(db, normalized):
+    for item in search_sentence(db, normalized, document_id=document_id):
         results.append(item)
 
-    for item in search_paragraph(db, normalized):
+    for item in search_paragraph(db, normalized, document_id=document_id):
         results.append(item)
 
     return results

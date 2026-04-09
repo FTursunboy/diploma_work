@@ -7,6 +7,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY main.py parser.py splitter.py database.py search.py ./
+COPY web ./web
 
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir .

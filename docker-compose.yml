@@ -10,6 +10,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./web:/app/web
       - ./storage:/app/storage
     depends_on:
       - db

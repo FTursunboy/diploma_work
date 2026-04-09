@@ -16,7 +16,7 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
 def validate_extension(file_name: str) -> str:
     extension = Path(file_name).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
-        raise ValueError("Поддерживаются только файлы PDF и DOCX.")
+        raise ValueError("Танҳо файлҳои PDF ва DOCX дастгирӣ мешаванд.")
     return extension
 
 
@@ -67,14 +67,14 @@ def extract_text(file_path: Path, file_type: str) -> str:
         return extract_pdf_text(file_path)
     if file_type == ".docx":
         return extract_docx_text(file_path)
-    raise ValueError("Неподдерживаемый формат файла.")
+    raise ValueError("Формати файл дастгирӣ намешавад.")
 
 
 def parse_document(db: Session, document: Document) -> dict[str, int]:
     try:
         structured_text = extract_text(Path(document.stored_path), document.file_type)
         if not structured_text:
-            raise ValueError("Не удалось извлечь текст из документа.")
+            raise ValueError("Аз файл матн бароварда нашуд.")
 
         document.full_text = " ".join(structured_text.split())
         document.status = "parsed"
@@ -138,7 +138,7 @@ def parse_document(db: Session, document: Document) -> dict[str, int]:
 def load_document_from_path(db: Session, file_path: str) -> tuple[Document, dict[str, int]]:
     source_path = Path(file_path)
     if not source_path.exists() or not source_path.is_file():
-        raise ValueError("Файл не найден.")
+        raise ValueError("Файл ёфт нашуд.")
 
     file_type, stored_path = copy_file_to_storage(source_path)
     document = create_uploaded_document(db, source_path.name, file_type, stored_path)
