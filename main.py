@@ -1,13 +1,15 @@
 from pathlib import Path
 
+from collections import Counter, defaultdict
+
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
-from database import Document, get_db, init_db
+from database import Document, Paragraph, Sentence, Word, get_db, init_db
 from parser import create_uploaded_document, load_document_from_path, parse_document, save_upload_file
 from search import search_paragraph, search_phrase, search_sentence, search_word
 
@@ -201,11 +203,12 @@ def search(
     query: str = Query(..., min_length=1),
     target: str = Query("phrase", pattern="^(word|sentence|paragraph|phrase)$"),
     exact: bool = Query(False),
+    mode: str | None = Query(None, pattern="^(exact|partial)$"),
     document_id: int | None = Query(None, gt=0),
     db: Session = Depends(get_db),
 ) -> dict:
     if target == "word":
-        results = search_word(db, query, exact=exact, document_id=document_id)
+        results = search_word(db, query, exact=exact, mode=mode, document_id=document_id)
     elif target == "sentence":
         results = search_sentence(db, query, document_id=document_id)
     elif target == "paragraph":
@@ -220,10 +223,11 @@ def search(
 def api_search_word(
     query: str = Query(..., min_length=1),
     exact: bool = Query(False),
+    mode: str | None = Query(None, pattern="^(exact|partial)$"),
     document_id: int | None = Query(None, gt=0),
     db: Session = Depends(get_db),
 ) -> dict:
-    results = search_word(db, query, exact=exact, document_id=document_id)
+    results = search_word(db, query, exact=exact, mode=mode, document_id=document_id)
     return {"query": query, "total": len(results), "results": results}
 
 
@@ -255,3 +259,175 @@ def api_search_phrase(
 ) -> dict:
     results = search_phrase(db, query, document_id=document_id)
     return {"query": query, "total": len(results), "results": results}
+
+
+@app.get("/tools/wordlist")
+def tool_wordlist(
+    document_id: int | None = Query(None, gt=0),
+    min_freq: int = Query(1, ge=1),
+    limit: int = Query(200, ge=1, le=2000),
+    sort: str = Query("freq", pattern="^(freq|alpha)$"),
+    db: Session = Depends(get_db),
+) -> dict:
+    word_col = func.lower(Word.word).label("word")
+    count_col = func.count(Word.id).label("count")
+    statement = select(word_col, count_col)
+    if document_id is not None:
+        statement = statement.where(Word.document_id == document_id)
+    statement = statement.group_by(word_col).having(func.count(Word.id) >= min_freq)
+    if sort == "alpha":
+        statement = statement.order_by(word_col.asc())
+    else:
+        statement = statement.order_by(count_col.desc(), word_col.asc())
+    rows = db.execute(statement.limit(limit)).all()
+    items = [{"word": word, "count": int(count)} for word, count in rows]
+    return {
+        "document_id": document_id,
+        "min_freq": min_freq,
+        "limit": limit,
+        "sort": sort,
+        "items": items,
+        "shown": len(items),
+    }
+
+
+@app.get("/tools/concordance")
+def tool_concordance(
+    query: str = Query(..., min_length=1),
+    document_id: int | None = Query(None, gt=0),
+    mode: str = Query("partial", pattern="^(exact|partial)$"),
+    window: int = Query(5, ge=1, le=25),
+    limit: int = Query(200, ge=1, le=2000),
+    db: Session = Depends(get_db),
+) -> dict:
+    normalized = query.strip()
+    if not normalized:
+        return {"query": query, "total": 0, "items": []}
+
+    q = normalized.lower()
+    if mode == "exact":
+        condition = func.lower(Word.word) == q
+    else:
+        condition = func.lower(Word.word).like(f"%{q}%")
+
+    hit_stmt = (
+        select(
+            Word.sentence_id,
+            Word.word_index,
+            Word.word,
+            Document.id.label("document_id"),
+            Document.filename,
+            Paragraph.paragraph_index,
+            Sentence.sentence_index,
+        )
+        .join(Sentence, Sentence.id == Word.sentence_id)
+        .join(Paragraph, Paragraph.id == Sentence.paragraph_id)
+        .join(Document, Document.id == Word.document_id)
+        .where(condition)
+        .order_by(Document.filename, Paragraph.paragraph_index, Sentence.sentence_index, Word.word_index)
+        .limit(limit)
+    )
+    if document_id is not None:
+        hit_stmt = hit_stmt.where(Word.document_id == document_id)
+
+    hits = db.execute(hit_stmt).all()
+    if not hits:
+        return {"query": query, "mode": mode, "total": 0, "items": []}
+
+    sentence_ids = sorted({row.sentence_id for row in hits})
+    words_stmt = (
+        select(Word.sentence_id, Word.word_index, Word.word)
+        .where(Word.sentence_id.in_(sentence_ids))
+        .order_by(Word.sentence_id, Word.word_index)
+    )
+    words_rows = db.execute(words_stmt).all()
+
+    words_by_sentence: dict[int, list[tuple[int, str]]] = defaultdict(list)
+    pos_by_sentence: dict[int, dict[int, int]] = defaultdict(dict)
+    for sentence_id, word_index, word in words_rows:
+        pos_by_sentence[int(sentence_id)][int(word_index)] = len(words_by_sentence[int(sentence_id)])
+        words_by_sentence[int(sentence_id)].append((int(word_index), word))
+
+    items: list[dict] = []
+    for row in hits:
+        sentence_id = int(row.sentence_id)
+        word_index = int(row.word_index)
+        words = words_by_sentence.get(sentence_id, [])
+        pos = pos_by_sentence.get(sentence_id, {}).get(word_index)
+        if pos is None:
+            continue
+        left = " ".join(w for _, w in words[max(0, pos - window) : pos])
+        right = " ".join(w for _, w in words[pos + 1 : pos + 1 + window])
+        items.append(
+            {
+                "document_id": int(row.document_id),
+                "filename": row.filename,
+                "paragraph_index": int(row.paragraph_index) if row.paragraph_index is not None else None,
+                "sentence_index": int(row.sentence_index) if row.sentence_index is not None else None,
+                "left": left,
+                "match": row.word,
+                "right": right,
+            }
+        )
+
+    return {
+        "query": query,
+        "mode": mode,
+        "window": window,
+        "limit": limit,
+        "document_id": document_id,
+        "total": len(items),
+        "items": items,
+    }
+
+
+@app.get("/tools/ngrams")
+def tool_ngrams(
+    n: int = Query(2, ge=2, le=5),
+    document_id: int | None = Query(None, gt=0),
+    min_freq: int = Query(2, ge=1),
+    limit: int = Query(100, ge=1, le=2000),
+    db: Session = Depends(get_db),
+) -> dict:
+    stmt = select(Word.sentence_id, Word.word_index, Word.word)
+    if document_id is not None:
+        stmt = stmt.where(Word.document_id == document_id)
+    stmt = stmt.order_by(Word.sentence_id, Word.word_index)
+    rows = db.execute(stmt).all()
+
+    counts: Counter[tuple[str, ...]] = Counter()
+    current_sentence = None
+    buffer: list[str] = []
+
+    def flush_sentence() -> None:
+        if len(buffer) < n:
+            return
+        for i in range(0, len(buffer) - n + 1):
+            counts[tuple(buffer[i : i + n])] += 1
+
+    for sentence_id, _, word in rows:
+        if current_sentence is None:
+            current_sentence = sentence_id
+        if sentence_id != current_sentence:
+            flush_sentence()
+            buffer = []
+            current_sentence = sentence_id
+        token = (word or "").strip().lower()
+        if token:
+            buffer.append(token)
+    flush_sentence()
+
+    items = [
+        {"ngram": " ".join(key), "count": int(count)}
+        for key, count in counts.most_common()
+        if count >= min_freq
+    ][:limit]
+
+    return {
+        "n": n,
+        "document_id": document_id,
+        "min_freq": min_freq,
+        "limit": limit,
+        "shown": len(items),
+        "items": items,
+    }

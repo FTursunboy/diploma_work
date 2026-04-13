@@ -22,18 +22,21 @@ def search_word(
     db: Session,
     query: str,
     exact: bool = False,
+    mode: str | None = None,
     document_id: int | None = None,
 ) -> list[dict[str, int | str | None]]:
     normalized = query.strip()
     if not normalized:
         return []
 
-    if exact:
-        condition = func.lower(Word.word) == normalized.lower()
-        match_type = "word_exact"
+    normalized_lower = normalized.lower()
+    if mode is None:
+        mode = "exact" if exact else "partial"
+
+    if mode == "exact":
+        condition = func.lower(Word.word) == normalized_lower
     else:
-        condition = Word.word.ilike(f"%{normalized}%")
-        match_type = "word_partial"
+        condition = func.lower(Word.word).like(f"%{normalized_lower}%")
 
     statement = (
         select(Document.id, Word.word, Paragraph.paragraph_index, Sentence.sentence_index)

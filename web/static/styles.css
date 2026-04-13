@@ -345,7 +345,7 @@ body {
 
 .search {
   display: grid;
-  grid-template-columns: 2fr 1.2fr 1.2fr auto auto;
+  grid-template-columns: 2fr 1.1fr 1.1fr 1.1fr auto;
   gap: 10px;
   align-items: end;
   margin-bottom: 12px;
@@ -353,6 +353,31 @@ body {
 
 .search__query {
   grid-column: 1 / 2;
+}
+
+.toolview {
+  display: none;
+}
+
+.toolview.is-active {
+  display: block;
+}
+
+.toolform {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.toolform .field {
+  min-width: 180px;
+  flex: 1 1 180px;
+}
+
+.toolform__wide {
+  flex: 2 1 320px !important;
 }
 
 .check {
@@ -434,6 +459,41 @@ body {
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.result__text--full {
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: initial;
+  overflow: visible;
+}
+
+.kwic {
+  display: flex;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.kwic__left {
+  flex: 1 1 0;
+  text-align: right;
+  color: var(--muted);
+}
+
+.kwic__match {
+  flex: 0 0 auto;
+  font-weight: 800;
+  color: var(--text);
+  background: rgba(59, 130, 246, 0.16);
+  border-radius: 8px;
+  padding: 0 6px;
+}
+
+.kwic__right {
+  flex: 1 1 0;
+  color: rgba(16, 24, 40, 0.86);
 }
 
 mark {

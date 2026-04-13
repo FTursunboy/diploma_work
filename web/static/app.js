@@ -4,6 +4,7 @@ const state = {
   docsById: new Map(),
   selectedDocId: null,
   selectedDoc: null,
+  activeView: "search",
   activeTab: "text",
   wordFreqByDocId: new Map(),
   renderLimits: {
@@ -24,9 +25,28 @@ const els = {
   searchQuery: document.getElementById("searchQuery"),
   searchTarget: document.getElementById("searchTarget"),
   searchDocument: document.getElementById("searchDocument"),
-  searchExact: document.getElementById("searchExact"),
-  exactWrap: document.getElementById("exactWrap"),
+  searchWordMode: document.getElementById("searchWordMode"),
+  wordModeWrap: document.getElementById("wordModeWrap"),
   searchBtn: document.getElementById("searchBtn"),
+  viewSearch: document.getElementById("viewSearch"),
+  viewConcordance: document.getElementById("viewConcordance"),
+  viewWordlist: document.getElementById("viewWordlist"),
+  viewNgrams: document.getElementById("viewNgrams"),
+  concordanceForm: document.getElementById("concordanceForm"),
+  concordanceQuery: document.getElementById("concordanceQuery"),
+  concordanceMode: document.getElementById("concordanceMode"),
+  concordanceDocument: document.getElementById("concordanceDocument"),
+  concordanceBtn: document.getElementById("concordanceBtn"),
+  wordlistForm: document.getElementById("wordlistForm"),
+  wordlistFilter: document.getElementById("wordlistFilter"),
+  wordlistDocument: document.getElementById("wordlistDocument"),
+  wordlistMinFreq: document.getElementById("wordlistMinFreq"),
+  wordlistBtn: document.getElementById("wordlistBtn"),
+  ngramsForm: document.getElementById("ngramsForm"),
+  ngramsN: document.getElementById("ngramsN"),
+  ngramsDocument: document.getElementById("ngramsDocument"),
+  ngramsMinFreq: document.getElementById("ngramsMinFreq"),
+  ngramsBtn: document.getElementById("ngramsBtn"),
   resultsMeta: document.getElementById("resultsMeta"),
   resultsList: document.getElementById("resultsList"),
   docTitle: document.getElementById("docTitle"),
@@ -118,23 +138,24 @@ function renderDocs() {
   }
 }
 
-function renderDocsDropdown() {
-  const current = els.searchDocument.value;
+function renderDocSelect(selectEl) {
+  if (!selectEl) return;
+  const current = selectEl.value;
   const options = [
     { value: "", label: "Ҳамаи файлҳо" },
     ...state.docs.map((d) => ({ value: String(d.id), label: `#${d.id} — ${d.filename}` })),
   ];
 
-  els.searchDocument.innerHTML = "";
+  selectEl.innerHTML = "";
   for (const opt of options) {
     const option = document.createElement("option");
     option.value = opt.value;
     option.textContent = opt.label;
-    els.searchDocument.appendChild(option);
+    selectEl.appendChild(option);
   }
 
-  if ([...els.searchDocument.options].some((o) => o.value === current)) {
-    els.searchDocument.value = current;
+  if ([...selectEl.options].some((o) => o.value === current)) {
+    selectEl.value = current;
   }
 }
 
@@ -144,7 +165,10 @@ async function refreshDocs({ keepSelection = true } = {}) {
     state.docs = Array.isArray(docs) ? docs : [];
     state.docsById = new Map(state.docs.map((d) => [d.id, d]));
     updateDocsMeta();
-    renderDocsDropdown();
+    renderDocSelect(els.searchDocument);
+    renderDocSelect(els.concordanceDocument);
+    renderDocSelect(els.wordlistDocument);
+    renderDocSelect(els.ngramsDocument);
 
     if (!keepSelection) {
       state.selectedDocId = null;
@@ -190,10 +214,22 @@ async function onUpload(e) {
 
 function setTab(tab) {
   state.activeTab = tab;
-  for (const btn of document.querySelectorAll(".tab")) {
+  for (const btn of document.querySelectorAll("[data-tab]")) {
     btn.classList.toggle("is-active", btn.dataset.tab === tab);
   }
   renderSelectedDoc();
+}
+
+function setView(view) {
+  state.activeView = view;
+  for (const btn of document.querySelectorAll("[data-view]")) {
+    btn.classList.toggle("is-active", btn.dataset.view === view);
+  }
+
+  if (els.viewSearch) els.viewSearch.classList.toggle("is-active", view === "search");
+  if (els.viewConcordance) els.viewConcordance.classList.toggle("is-active", view === "concordance");
+  if (els.viewWordlist) els.viewWordlist.classList.toggle("is-active", view === "wordlist");
+  if (els.viewNgrams) els.viewNgrams.classList.toggle("is-active", view === "ngrams");
 }
 
 function renderStats(doc) {
@@ -370,11 +406,12 @@ async function selectDoc(docId) {
   }
 }
 
-function setExactVisibility() {
+function setWordModeVisibility() {
   const isWord = els.searchTarget.value === "word";
-  els.exactWrap.style.visibility = isWord ? "visible" : "hidden";
-  els.searchExact.disabled = !isWord;
-  if (!isWord) els.searchExact.checked = false;
+  if (!els.wordModeWrap || !els.searchWordMode) return;
+  els.wordModeWrap.style.display = isWord ? "" : "none";
+  els.searchWordMode.disabled = !isWord;
+  if (!isWord) els.searchWordMode.value = "partial";
 }
 
 function highlight(text, query) {
@@ -442,28 +479,211 @@ function renderResults(data, query) {
   }
 }
 
+async function performSearch({ query, target, documentId, mode } = {}) {
+  const q = (query || "").trim();
+  if (!q) return;
+  const t = target || "phrase";
+
+  const params = new URLSearchParams({ query: q, target: t });
+  if (t === "word" && mode) params.set("mode", mode);
+  if (documentId) params.set("document_id", String(documentId));
+
+  const data = await fetchJson(`/search?${params.toString()}`);
+  renderResults(data, q);
+}
+
 async function onSearch(e) {
   e.preventDefault();
 
-  const query = (els.searchQuery.value || "").trim();
-  if (!query) return;
-
-  const target = els.searchTarget.value || "phrase";
-  const exact = els.searchExact.checked ? "true" : "false";
-  const docId = els.searchDocument.value;
-
-  const params = new URLSearchParams({ query, target });
-  if (target === "word") params.set("exact", exact);
-  if (docId) params.set("document_id", docId);
-
   setBusy(els.searchBtn, true, "Ҷустуҷӯ…");
   try {
-    const data = await fetchJson(`/search?${params.toString()}`);
-    renderResults(data, query);
+    const query = (els.searchQuery.value || "").trim();
+    const target = els.searchTarget.value || "phrase";
+    const docId = els.searchDocument.value;
+    const mode = target === "word" ? els.searchWordMode.value : null;
+    await performSearch({ query, target, documentId: docId || null, mode });
   } catch (err) {
     toast(`Хатои ҷустуҷӯ: ${String(err.message || err)}`, "error");
   } finally {
     setBusy(els.searchBtn, false, "Ҷустуҷӯ");
+  }
+}
+
+function renderToolEmpty(message = "Маълумот нест.") {
+  els.resultsList.innerHTML = "";
+  const empty = document.createElement("div");
+  empty.className = "placeholder";
+  empty.textContent = message;
+  els.resultsList.appendChild(empty);
+}
+
+function renderConcordance(data) {
+  const total = data?.total ?? 0;
+  const items = Array.isArray(data?.items) ? data.items : [];
+  els.resultsMeta.textContent = `Concordance: ${total}`;
+  els.resultsList.innerHTML = "";
+
+  if (!items.length) return renderToolEmpty("Мутобиқат нест.");
+
+  for (const it of items) {
+    const docName = it?.filename || `Файл #${it?.document_id ?? "?"}`;
+    const p = it?.paragraph_index != null ? `Банд ${it.paragraph_index}` : null;
+    const s = it?.sentence_index != null ? `Ҷумла ${it.sentence_index}` : null;
+    const where = [p, s].filter(Boolean).join(" • ") || "—";
+
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "result";
+    card.innerHTML = `
+      <div class="result__top">
+        <div class="result__doc">${escapeHtml(docName)}</div>
+        <div class="result__where">${escapeHtml(where)}</div>
+      </div>
+      <div class="result__text result__text--full">
+        <div class="kwic">
+          <span class="kwic__left">${escapeHtml(it.left || "")}</span>
+          <span class="kwic__match">${escapeHtml(it.match || "")}</span>
+          <span class="kwic__right">${escapeHtml(it.right || "")}</span>
+        </div>
+      </div>
+    `;
+    card.addEventListener("click", () => selectDoc(it.document_id));
+    els.resultsList.appendChild(card);
+  }
+}
+
+async function onConcordance(e) {
+  e.preventDefault();
+  const query = (els.concordanceQuery.value || "").trim();
+  if (!query) return;
+
+  const docId = els.concordanceDocument.value;
+  const mode = els.concordanceMode.value || "partial";
+  const params = new URLSearchParams({ query, mode, window: "5", limit: "200" });
+  if (docId) params.set("document_id", docId);
+
+  setBusy(els.concordanceBtn, true, "…");
+  try {
+    const data = await fetchJson(`/tools/concordance?${params.toString()}`);
+    renderConcordance(data);
+  } catch (err) {
+    toast(`Хатои concordance: ${String(err.message || err)}`, "error");
+  } finally {
+    setBusy(els.concordanceBtn, false, "Намоиш");
+  }
+}
+
+function renderWordlist(data, filterText) {
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const filter = String(filterText || "").trim().toLowerCase();
+  const shown = items.filter((it) => !filter || String(it.word || "").toLowerCase().includes(filter));
+
+  els.resultsMeta.textContent = `Wordlist: ${shown.length}`;
+  els.resultsList.innerHTML = "";
+  if (!shown.length) return renderToolEmpty("Мутобиқат нест.");
+
+  const sourceDocId = els.wordlistDocument.value || "";
+  for (const it of shown) {
+    const word = String(it.word || "");
+    const count = it.count ?? 0;
+
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "result";
+    card.innerHTML = `
+      <div class="result__top">
+        <div class="result__doc"><span class="mono">${escapeHtml(word)}</span></div>
+        <div class="badge badge--count">×${escapeHtml(count)}</div>
+      </div>
+      <div class="result__text">Клик кунед, то ҷустуҷӯи дақиқ иҷро шавад.</div>
+    `;
+    card.addEventListener("click", async () => {
+      els.searchQuery.value = word;
+      els.searchTarget.value = "word";
+      setWordModeVisibility();
+      els.searchWordMode.value = "exact";
+      els.searchDocument.value = sourceDocId;
+      setView("search");
+      try {
+        await performSearch({ query: word, target: "word", documentId: sourceDocId || null, mode: "exact" });
+      } catch (err) {
+        toast(`Хатои ҷустуҷӯ: ${String(err.message || err)}`, "error");
+      }
+    });
+    els.resultsList.appendChild(card);
+  }
+}
+
+async function onWordlist(e) {
+  e.preventDefault();
+  const docId = els.wordlistDocument.value;
+  const minFreq = Number(els.wordlistMinFreq.value || 2);
+  const params = new URLSearchParams({ min_freq: String(minFreq), limit: "500" });
+  if (docId) params.set("document_id", docId);
+
+  setBusy(els.wordlistBtn, true, "…");
+  try {
+    const data = await fetchJson(`/tools/wordlist?${params.toString()}`);
+    renderWordlist(data, els.wordlistFilter.value);
+  } catch (err) {
+    toast(`Хатои wordlist: ${String(err.message || err)}`, "error");
+  } finally {
+    setBusy(els.wordlistBtn, false, "Сохтан");
+  }
+}
+
+function renderNgrams(data) {
+  const items = Array.isArray(data?.items) ? data.items : [];
+  els.resultsMeta.textContent = `N-grams: ${items.length}`;
+  els.resultsList.innerHTML = "";
+  if (!items.length) return renderToolEmpty("Маълумот нест.");
+
+  const sourceDocId = els.ngramsDocument.value || "";
+  for (const it of items) {
+    const ngram = String(it.ngram || "");
+    const count = it.count ?? 0;
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "result";
+    card.innerHTML = `
+      <div class="result__top">
+        <div class="result__doc"><span class="mono">${escapeHtml(ngram)}</span></div>
+        <div class="badge badge--count">×${escapeHtml(count)}</div>
+      </div>
+      <div class="result__text">Клик кунед, то ҷустуҷӯ аз рӯи «Ибора» иҷро шавад.</div>
+    `;
+    card.addEventListener("click", async () => {
+      els.searchQuery.value = ngram;
+      els.searchTarget.value = "phrase";
+      setWordModeVisibility();
+      els.searchDocument.value = sourceDocId;
+      setView("search");
+      try {
+        await performSearch({ query: ngram, target: "phrase", documentId: sourceDocId || null });
+      } catch (err) {
+        toast(`Хатои ҷустуҷӯ: ${String(err.message || err)}`, "error");
+      }
+    });
+    els.resultsList.appendChild(card);
+  }
+}
+
+async function onNgrams(e) {
+  e.preventDefault();
+  const docId = els.ngramsDocument.value;
+  const n = Number(els.ngramsN.value || 2);
+  const minFreq = Number(els.ngramsMinFreq.value || 2);
+  const params = new URLSearchParams({ n: String(n), min_freq: String(minFreq), limit: "200" });
+  if (docId) params.set("document_id", docId);
+
+  setBusy(els.ngramsBtn, true, "…");
+  try {
+    const data = await fetchJson(`/tools/ngrams?${params.toString()}`);
+    renderNgrams(data);
+  } catch (err) {
+    toast(`Хатои n-grams: ${String(err.message || err)}`, "error");
+  } finally {
+    setBusy(els.ngramsBtn, false, "Сохтан");
   }
 }
 
@@ -501,8 +721,14 @@ function onDownload() {
 }
 
 function attachTabEvents() {
-  for (const btn of document.querySelectorAll(".tab")) {
+  for (const btn of document.querySelectorAll("[data-tab]")) {
     btn.addEventListener("click", () => setTab(btn.dataset.tab));
+  }
+}
+
+function attachViewEvents() {
+  for (const btn of document.querySelectorAll("[data-view]")) {
+    btn.addEventListener("click", () => setView(btn.dataset.view));
   }
 }
 
@@ -511,15 +737,20 @@ function attachEvents() {
   els.uploadForm.addEventListener("submit", onUpload);
   els.searchForm.addEventListener("submit", onSearch);
   els.searchTarget.addEventListener("change", () => {
-    setExactVisibility();
+    setWordModeVisibility();
   });
+  if (els.concordanceForm) els.concordanceForm.addEventListener("submit", onConcordance);
+  if (els.wordlistForm) els.wordlistForm.addEventListener("submit", onWordlist);
+  if (els.ngramsForm) els.ngramsForm.addEventListener("submit", onNgrams);
   els.downloadBtn.addEventListener("click", onDownload);
   els.deleteBtn.addEventListener("click", onDelete);
   attachTabEvents();
+  attachViewEvents();
 }
 
 function init() {
-  setExactVisibility();
+  setWordModeVisibility();
+  setView(state.activeView);
   attachEvents();
   refreshDocs();
 }

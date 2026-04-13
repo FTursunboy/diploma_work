@@ -52,43 +52,122 @@
           <div class="panel__hint">Дар ҳамаи файлҳо ё дар файли интихобшуда</div>
         </div>
 
-        <form id="searchForm" class="search">
-          <label class="field search__query">
-            <span class="field__label">Дархост</span>
-            <input
-              id="searchQuery"
-              class="input"
-              placeholder="Калимаро ё ибораро ворид кунед…"
-              autocomplete="off"
-              required
-              minlength="1"
-            />
-          </label>
+        <div class="tabs tabs--views" role="tablist" aria-label="Асбобҳо">
+          <button class="tab is-active" type="button" data-view="search">Ҷустуҷӯ</button>
+          <button class="tab" type="button" data-view="concordance">Concordance</button>
+          <button class="tab" type="button" data-view="wordlist">Wordlist</button>
+          <button class="tab" type="button" data-view="ngrams">N-grams</button>
+        </div>
 
-          <label class="field">
-            <span class="field__label">Намуд</span>
-            <select id="searchTarget" class="select">
-              <option value="phrase" selected>Ибора (ҷумла + банд)</option>
-              <option value="word">Калима</option>
-              <option value="sentence">Ҷумла</option>
-              <option value="paragraph">Банд</option>
-            </select>
-          </label>
+        <div id="viewSearch" class="toolview is-active">
+          <form id="searchForm" class="search">
+            <label class="field search__query">
+              <span class="field__label">Дархост</span>
+              <input
+                id="searchQuery"
+                class="input"
+                placeholder="Калимаро ё ибораро ворид кунед…"
+                autocomplete="off"
+                required
+                minlength="1"
+              />
+            </label>
 
-          <label class="field">
-            <span class="field__label">Файл</span>
-            <select id="searchDocument" class="select">
-              <option value="" selected>Ҳамаи файлҳо</option>
-            </select>
-          </label>
+            <label class="field">
+              <span class="field__label">Намуд</span>
+              <select id="searchTarget" class="select">
+                <option value="phrase" selected>Ибора (ҷумла + банд)</option>
+                <option value="word">Калима</option>
+                <option value="sentence">Ҷумла</option>
+                <option value="paragraph">Банд</option>
+              </select>
+            </label>
 
-          <label class="check" id="exactWrap">
-            <input id="searchExact" type="checkbox" />
-            <span>Мутобиқати дақиқ (барои «Калима»)</span>
-          </label>
+            <label class="field">
+              <span class="field__label">Файл</span>
+              <select id="searchDocument" class="select">
+                <option value="" selected>Ҳамаи файлҳо</option>
+              </select>
+            </label>
 
-          <button id="searchBtn" class="btn btn--primary" type="submit">Ҷустуҷӯ</button>
-        </form>
+            <label class="field" id="wordModeWrap">
+              <span class="field__label">Режим (барои «Калима»)</span>
+              <select id="searchWordMode" class="select">
+                <option value="partial" selected>Қисман</option>
+                <option value="exact">Дақиқ</option>
+              </select>
+            </label>
+
+            <button id="searchBtn" class="btn btn--primary" type="submit">Ҷустуҷӯ</button>
+          </form>
+        </div>
+
+        <div id="viewConcordance" class="toolview">
+          <form id="concordanceForm" class="toolform">
+            <label class="field toolform__wide">
+              <span class="field__label">Дархост</span>
+              <input id="concordanceQuery" class="input" placeholder="Калима…" autocomplete="off" required />
+            </label>
+            <label class="field">
+              <span class="field__label">Режим</span>
+              <select id="concordanceMode" class="select">
+                <option value="partial" selected>Қисман</option>
+                <option value="exact">Дақиқ</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Файл</span>
+              <select id="concordanceDocument" class="select">
+                <option value="" selected>Ҳамаи файлҳо</option>
+              </select>
+            </label>
+            <button id="concordanceBtn" class="btn btn--primary" type="submit">Намоиш</button>
+          </form>
+        </div>
+
+        <div id="viewWordlist" class="toolview">
+          <form id="wordlistForm" class="toolform">
+            <label class="field toolform__wide">
+              <span class="field__label">Филтр (ихтиёрӣ)</span>
+              <input id="wordlistFilter" class="input" placeholder="масалан: китоб" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span class="field__label">Файл</span>
+              <select id="wordlistDocument" class="select">
+                <option value="" selected>Ҳамаи файлҳо</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Min freq</span>
+              <input id="wordlistMinFreq" class="input" type="number" min="1" value="2" />
+            </label>
+            <button id="wordlistBtn" class="btn btn--primary" type="submit">Сохтан</button>
+          </form>
+        </div>
+
+        <div id="viewNgrams" class="toolview">
+          <form id="ngramsForm" class="toolform">
+            <label class="field">
+              <span class="field__label">N</span>
+              <select id="ngramsN" class="select">
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Файл</span>
+              <select id="ngramsDocument" class="select">
+                <option value="" selected>Ҳамаи файлҳо</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Min freq</span>
+              <input id="ngramsMinFreq" class="input" type="number" min="1" value="2" />
+            </label>
+            <button id="ngramsBtn" class="btn btn--primary" type="submit">Сохтан</button>
+          </form>
+        </div>
 
         <div class="split">
           <section class="card">

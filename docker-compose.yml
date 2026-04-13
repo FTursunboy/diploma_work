@@ -11,6 +11,11 @@ services:
       - "8000:8000"
     volumes:
       - ./web:/app/web
+      - ./main.py:/app/main.py
+      - ./search.py:/app/search.py
+      - ./parser.py:/app/parser.py
+      - ./splitter.py:/app/splitter.py
+      - ./database.py:/app/database.py
       - ./storage:/app/storage
     depends_on:
       - db
