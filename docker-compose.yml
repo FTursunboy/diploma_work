@@ -16,11 +16,15 @@ services:
       - ./parser.py:/app/parser.py
       - ./splitter.py:/app/splitter.py
       - ./database.py:/app/database.py
+      - ./auth.py:/app/auth.py
       - ./storage:/app/storage
     depends_on:
       - db
     environment:
       - DATABASE_URL=mysql+pymysql://bookuser:bookpass@db:3306/books
+      - AUTH_SECRET=change-me-in-prod
+      - ADMIN_EMAIL=admin@local
+      - ADMIN_PASSWORD=admin12345
 
   db:
     image: mysql:8.1

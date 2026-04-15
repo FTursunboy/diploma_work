@@ -1,5 +1,6 @@
 /* eslint-disable no-alert */
 const state = {
+  me: null,
   docs: [],
   docsById: new Map(),
   selectedDocId: null,
@@ -15,12 +16,26 @@ const state = {
 };
 
 const els = {
+  userBadge: document.getElementById("userBadge"),
+  adminLink: document.getElementById("adminLink"),
+  viewerLink: document.getElementById("viewerLink"),
+  loginLink: document.getElementById("loginLink"),
+  registerLink: document.getElementById("registerLink"),
+  logoutBtn: document.getElementById("logoutBtn"),
   docsMeta: document.getElementById("docsMeta"),
   docFilter: document.getElementById("docFilter"),
   docsList: document.getElementById("docsList"),
-  uploadForm: document.getElementById("uploadForm"),
+  uploadCard: document.getElementById("uploadCard"),
+  openUploadModalBtn: document.getElementById("openUploadModalBtn"),
+  uploadModal: document.getElementById("uploadModal"),
+  uploadModalForm: document.getElementById("uploadModalForm"),
   uploadFile: document.getElementById("uploadFile"),
   uploadBtn: document.getElementById("uploadBtn"),
+  metaTitle: document.getElementById("metaTitle"),
+  metaAuthor: document.getElementById("metaAuthor"),
+  metaYear: document.getElementById("metaYear"),
+  metaPublisher: document.getElementById("metaPublisher"),
+  metaBib: document.getElementById("metaBib"),
   searchForm: document.getElementById("searchForm"),
   searchQuery: document.getElementById("searchQuery"),
   searchTarget: document.getElementById("searchTarget"),
@@ -43,6 +58,7 @@ const els = {
   wordlistMinFreq: document.getElementById("wordlistMinFreq"),
   wordlistBtn: document.getElementById("wordlistBtn"),
   ngramsForm: document.getElementById("ngramsForm"),
+  ngramsQuery: document.getElementById("ngramsQuery"),
   ngramsN: document.getElementById("ngramsN"),
   ngramsDocument: document.getElementById("ngramsDocument"),
   ngramsMinFreq: document.getElementById("ngramsMinFreq"),
@@ -67,6 +83,9 @@ function escapeHtml(value) {
 }
 
 function toast(message, type = "info") {
+  if (window.Auth?.toast) return window.Auth.toast(message, type);
+  // fallback
+  if (!els.toast) return;
   els.toast.textContent = message;
   els.toast.dataset.type = type;
   els.toast.classList.add("is-visible");
@@ -75,12 +94,9 @@ function toast(message, type = "info") {
 }
 
 async function fetchJson(path, options) {
+  if (window.Auth?.fetchJson) return window.Auth.fetchJson(path, options);
   const res = await fetch(path, options);
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    const detail = text || res.statusText || "Хатои дархост";
-    throw new Error(detail);
-  }
+  if (!res.ok) throw new Error((await res.text().catch(() => "")) || res.statusText || "Хатои дархост");
   return res.json();
 }
 
@@ -88,6 +104,29 @@ function setBusy(button, busy, label) {
   if (!button) return;
   button.disabled = !!busy;
   if (label) button.textContent = label;
+}
+
+function setAuthNav(user) {
+  if (!user) return;
+  const who = user.email || user.username || "—";
+  const role = String(user.role || "");
+  const roleLabel = role === "admin" ? "админ" : role === "moderator" ? "модератор" : "корбар";
+  if (els.userBadge) {
+    els.userBadge.style.display = "";
+    els.userBadge.textContent = `${who} • ${roleLabel}`;
+  }
+  if (els.viewerLink) els.viewerLink.style.display = "";
+  if (els.adminLink) els.adminLink.style.display = role === "admin" ? "" : "none";
+  if (els.loginLink) els.loginLink.style.display = "none";
+  if (els.registerLink) els.registerLink.style.display = "none";
+  if (els.logoutBtn) {
+    els.logoutBtn.style.display = "";
+    els.logoutBtn.addEventListener("click", () => window.Auth?.logout?.());
+  }
+
+  const canModerate = role === "moderator" || role === "admin";
+  if (els.uploadCard) els.uploadCard.style.display = canModerate ? "" : "none";
+  if (els.deleteBtn) els.deleteBtn.style.display = role === "admin" ? "" : "none";
 }
 
 function normalizeStatus(status) {
@@ -98,7 +137,7 @@ function normalizeStatus(status) {
 }
 
 function docDisplayName(doc) {
-  const base = doc?.filename || `Файл #${doc?.id ?? "?"}`;
+  const base = doc?.title || doc?.filename || `Файл #${doc?.id ?? "?"}`;
   return `${base}`;
 }
 
@@ -128,7 +167,7 @@ function renderDocs() {
     if (doc.id === state.selectedDocId) item.classList.add("is-active");
     item.innerHTML = `
       <div class="docitem__top">
-        <div class="docitem__name">${escapeHtml(doc.filename)}</div>
+        <div class="docitem__name">${escapeHtml(docDisplayName(doc))}</div>
         <div class="badge badge--${escapeHtml(doc.status)}">${escapeHtml(normalizeStatus(doc.status))}</div>
       </div>
       <div class="docitem__meta">#${doc.id} • ${escapeHtml(doc.file_type || "—")}</div>
@@ -188,27 +227,72 @@ async function refreshDocs({ keepSelection = true } = {}) {
 }
 
 async function uploadDocument(file) {
-  const form = new FormData();
-  form.append("file", file);
-  return fetchJson("/documents/upload", { method: "POST", body: form });
+  return fetchJson("/documents/upload", { method: "POST", body: file });
 }
 
-async function onUpload(e) {
+function setModalOpen(open) {
+  if (!els.uploadModal) return;
+  els.uploadModal.classList.toggle("is-open", !!open);
+  els.uploadModal.setAttribute("aria-hidden", open ? "false" : "true");
+  document.documentElement.style.overflow = open ? "hidden" : "";
+  if (open) {
+    window.setTimeout(() => els.metaTitle?.focus?.(), 0);
+  }
+}
+
+function inferTitleFromFilename(name) {
+  const base = String(name || "").split(/[\\/]/).pop() || "";
+  return base.replace(/\.(pdf|docx)$/i, "").trim();
+}
+
+function buildBibliography({ author, title, publisher, year }) {
+  const a = String(author || "").trim();
+  const t = String(title || "").trim();
+  const p = String(publisher || "").trim();
+  const y = String(year || "").trim();
+  const parts = [];
+  if (a) parts.push(a);
+  if (t) parts.push(t);
+  const tail = [p, y].filter(Boolean).join(", ");
+  if (tail) parts.push(`— ${tail}.`);
+  return parts.join(". ");
+}
+
+async function onUploadModalSubmit(e) {
   e.preventDefault();
-  const file = els.uploadFile.files?.[0];
+  const file = els.uploadFile?.files?.[0];
   if (!file) return toast("Файли PDF/DOCX-ро интихоб кунед.", "warning");
+
+  const title = String(els.metaTitle?.value || "").trim();
+  const author = String(els.metaAuthor?.value || "").trim();
+  const publisher = String(els.metaPublisher?.value || "").trim();
+  const year = String(els.metaYear?.value || "").trim();
+  const bibliography = String(els.metaBib?.value || "").trim();
+
+  if (!title || !author || !publisher || !year || !bibliography) {
+    return toast("Лутфан ҳамаи майдонҳоро пур кунед.", "warning");
+  }
+
+  const form = new FormData();
+  form.append("file", file);
+  form.append("title", title);
+  form.append("author", author);
+  form.append("publisher", publisher);
+  form.append("publication_year", year);
+  form.append("bibliography", bibliography);
 
   setBusy(els.uploadBtn, true, "Боргузорӣ…");
   try {
-    const doc = await uploadDocument(file);
+    const doc = await uploadDocument(form);
     toast("Файл боргузорӣ ва коркард шуд.", "success");
     await refreshDocs({ keepSelection: true });
     if (doc?.id) await selectDoc(doc.id);
+    if (els.uploadModalForm) els.uploadModalForm.reset();
+    setModalOpen(false);
   } catch (err) {
     toast(`Хатои боргузорӣ: ${String(err.message || err)}`, "error");
   } finally {
     setBusy(els.uploadBtn, false, "Боргузорӣ");
-    els.uploadForm.reset();
   }
 }
 
@@ -230,6 +314,11 @@ function setView(view) {
   if (els.viewConcordance) els.viewConcordance.classList.toggle("is-active", view === "concordance");
   if (els.viewWordlist) els.viewWordlist.classList.toggle("is-active", view === "wordlist");
   if (els.viewNgrams) els.viewNgrams.classList.toggle("is-active", view === "ngrams");
+
+  if (view === "ngrams" && els.ngramsBtn) {
+    const query = String(els.ngramsQuery?.value || "").trim();
+    els.ngramsBtn.textContent = query ? "Ёфтан" : "Сохтан";
+  }
 }
 
 function renderStats(doc) {
@@ -245,11 +334,24 @@ function renderStats(doc) {
   const status = normalizeStatus(doc.status);
   const error = doc.error_message ? `<span class="stats__error">${escapeHtml(doc.error_message)}</span>` : "";
 
+  const author = doc.author ? `<div class="stat"><div class="stat__k">Муаллиф</div><div class="stat__v">${escapeHtml(doc.author)}</div></div>` : "";
+  const publisher = doc.publisher
+    ? `<div class="stat"><div class="stat__k">Ношир</div><div class="stat__v">${escapeHtml(doc.publisher)}</div></div>`
+    : "";
+  const year =
+    doc.publication_year != null
+      ? `<div class="stat"><div class="stat__k">Сол</div><div class="stat__v">${escapeHtml(doc.publication_year)}</div></div>`
+      : "";
+
   els.docStats.innerHTML = `
     <div class="stat"><div class="stat__k">Ҳолат</div><div class="stat__v">${escapeHtml(status)}</div></div>
     <div class="stat"><div class="stat__k">Бандҳо</div><div class="stat__v">${paragraphsCount}</div></div>
     <div class="stat"><div class="stat__k">Ҷумлаҳо</div><div class="stat__v">${sentencesCount}</div></div>
     <div class="stat"><div class="stat__k">Калимаҳо</div><div class="stat__v">${wordsCount}</div></div>
+    ${author}
+    ${publisher}
+    ${year}
+    ${doc.bibliography ? `<div class="stat stat--wide"><div class="stat__k">Библиография</div><div class="stat__v">${escapeHtml(doc.bibliography)}</div></div>` : ""}
     ${error ? `<div class="stat stat--wide">${error}</div>` : ""}
   `;
 }
@@ -375,7 +477,7 @@ function renderSelectedDoc() {
 
   els.docBody.innerHTML = html;
   els.downloadBtn.disabled = false;
-  els.deleteBtn.disabled = false;
+  els.deleteBtn.disabled = !(state.me && state.me.role === "admin");
 
   const more = els.docBody.querySelector("[data-more]");
   if (more) {
@@ -668,22 +770,60 @@ function renderNgrams(data) {
   }
 }
 
+function renderNgramSearch(data) {
+  const query = String(data?.query || "").trim();
+  const total = data?.total ?? 0;
+  const items = Array.isArray(data?.items) ? data.items : [];
+  const suffix = data?.document_id ? " (дар файли интихобшуда)" : "";
+
+  els.resultsMeta.textContent = `Ҷустуҷӯи ибора: «${query}» — ${total}${suffix}`;
+  els.resultsList.innerHTML = "";
+
+  if (!items.length) return renderToolEmpty("Мутобиқат нест.");
+
+  for (const it of items) {
+    const docName = it?.title || it?.filename || `Файл #${it?.document_id ?? "?"}`;
+    const count = it?.count ?? 0;
+
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "result";
+    card.innerHTML = `
+      <div class="result__top">
+        <div class="result__doc">${escapeHtml(docName)}</div>
+        <div class="badge badge--count">×${escapeHtml(count)}</div>
+      </div>
+      <div class="result__text">Клик кунед, то файл кушода шавад.</div>
+    `;
+    card.addEventListener("click", () => selectDoc(it.document_id));
+    els.resultsList.appendChild(card);
+  }
+}
+
 async function onNgrams(e) {
   e.preventDefault();
   const docId = els.ngramsDocument.value;
-  const n = Number(els.ngramsN.value || 2);
-  const minFreq = Number(els.ngramsMinFreq.value || 2);
-  const params = new URLSearchParams({ n: String(n), min_freq: String(minFreq), limit: "200" });
-  if (docId) params.set("document_id", docId);
+  const query = String(els.ngramsQuery?.value || "").trim();
 
   setBusy(els.ngramsBtn, true, "…");
   try {
-    const data = await fetchJson(`/tools/ngrams?${params.toString()}`);
-    renderNgrams(data);
+    if (query) {
+      const params = new URLSearchParams({ query, mode: "exact", limit: "50" });
+      if (docId) params.set("document_id", docId);
+      const data = await fetchJson(`/tools/ngram-search?${params.toString()}`);
+      renderNgramSearch(data);
+    } else {
+      const n = Number(els.ngramsN.value || 2);
+      const minFreq = Number(els.ngramsMinFreq.value || 2);
+      const params = new URLSearchParams({ n: String(n), min_freq: String(minFreq), limit: "200" });
+      if (docId) params.set("document_id", docId);
+      const data = await fetchJson(`/tools/ngrams?${params.toString()}`);
+      renderNgrams(data);
+    }
   } catch (err) {
     toast(`Хатои n-grams: ${String(err.message || err)}`, "error");
   } finally {
-    setBusy(els.ngramsBtn, false, "Сохтан");
+    setBusy(els.ngramsBtn, false, query ? "Ёфтан" : "Сохтан");
   }
 }
 
@@ -710,14 +850,23 @@ async function onDelete() {
 function onDownload() {
   const doc = state.selectedDoc;
   if (!doc?.id) return;
-
-  const link = document.createElement("a");
-  link.href = `/documents/${doc.id}/file`;
-  link.download = doc.filename || "";
-  link.rel = "noreferrer";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  // Authorization header is required, so download via fetch -> blob.
+  (async () => {
+    try {
+      const blob = await window.Auth.fetchBlob(`/documents/${doc.id}/file`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = doc.filename || "";
+      link.rel = "noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast(`Хатои зеркашӣ: ${String(err.message || err)}`, "error");
+    }
+  })();
 }
 
 function attachTabEvents() {
@@ -734,7 +883,43 @@ function attachViewEvents() {
 
 function attachEvents() {
   els.docFilter.addEventListener("input", renderDocs);
-  els.uploadForm.addEventListener("submit", onUpload);
+  if (els.openUploadModalBtn) els.openUploadModalBtn.addEventListener("click", () => setModalOpen(true));
+  if (els.uploadModalForm) els.uploadModalForm.addEventListener("submit", onUploadModalSubmit);
+  if (els.uploadModal) {
+    els.uploadModal.addEventListener("click", (e) => {
+      if (e.target && e.target.hasAttribute && e.target.hasAttribute("data-modal-close")) setModalOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && els.uploadModal.classList.contains("is-open")) setModalOpen(false);
+    });
+  }
+  if (els.uploadFile) {
+    els.uploadFile.addEventListener("change", () => {
+      const file = els.uploadFile.files?.[0];
+      if (!file) return;
+      if (els.metaTitle && !String(els.metaTitle.value || "").trim()) els.metaTitle.value = inferTitleFromFilename(file.name);
+      const author = String(els.metaAuthor?.value || "").trim();
+      const title = String(els.metaTitle?.value || "").trim();
+      const publisher = String(els.metaPublisher?.value || "").trim();
+      const year = String(els.metaYear?.value || "").trim();
+      if (els.metaBib && !String(els.metaBib.value || "").trim()) {
+        els.metaBib.value = buildBibliography({ author, title, publisher, year });
+      }
+    });
+  }
+  for (const el of [els.metaAuthor, els.metaTitle, els.metaPublisher, els.metaYear]) {
+    if (!el) continue;
+    el.addEventListener("input", () => {
+      if (!els.metaBib) return;
+      const current = String(els.metaBib.value || "").trim();
+      if (current) return; // don't overwrite user text
+      const author = String(els.metaAuthor?.value || "").trim();
+      const title = String(els.metaTitle?.value || "").trim();
+      const publisher = String(els.metaPublisher?.value || "").trim();
+      const year = String(els.metaYear?.value || "").trim();
+      els.metaBib.value = buildBibliography({ author, title, publisher, year });
+    });
+  }
   els.searchForm.addEventListener("submit", onSearch);
   els.searchTarget.addEventListener("change", () => {
     setWordModeVisibility();
@@ -742,13 +927,31 @@ function attachEvents() {
   if (els.concordanceForm) els.concordanceForm.addEventListener("submit", onConcordance);
   if (els.wordlistForm) els.wordlistForm.addEventListener("submit", onWordlist);
   if (els.ngramsForm) els.ngramsForm.addEventListener("submit", onNgrams);
+  if (els.ngramsQuery && els.ngramsBtn) {
+    els.ngramsQuery.addEventListener("input", () => {
+      const query = String(els.ngramsQuery.value || "").trim();
+      els.ngramsBtn.textContent = query ? "Ёфтан" : "Сохтан";
+    });
+  }
   els.downloadBtn.addEventListener("click", onDownload);
-  els.deleteBtn.addEventListener("click", onDelete);
+  if (els.deleteBtn) els.deleteBtn.addEventListener("click", onDelete);
   attachTabEvents();
   attachViewEvents();
 }
 
-function init() {
+async function init() {
+  if (!window.Auth?.requireAuthOrRedirect?.()) return;
+  try {
+    state.me = await window.Auth.me();
+  } catch (err) {
+    return;
+  }
+  if (state.me?.role === "user") {
+    window.location.href = "/viewer";
+    return;
+  }
+
+  setAuthNav(state.me);
   setWordModeVisibility();
   setView(state.activeView);
   attachEvents();

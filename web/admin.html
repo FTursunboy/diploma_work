@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="tg">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Book Parser — Мудирият</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260415-2" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="brand">
+          <div class="brand__mark" aria-hidden="true">BP</div>
+          <div class="brand__text">
+            <div class="brand__title">Book Parser</div>
+            <div class="brand__subtitle">Мудирият: нақшҳои корбарон</div>
+          </div>
+        </div>
+        <nav class="topbar__nav">
+          <span class="badge" id="userBadge" style="display: none"></span>
+          <a class="link" href="/">Ҳуҷҷатҳо</a>
+          <a class="link" href="/viewer">Намоиш</a>
+          <button class="btn" id="logoutBtn" type="button" style="display: none">Баромадан</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="layout layout--center">
+      <section class="panel">
+        <div class="panel__header">
+          <h2 class="panel__title">Корбарон</h2>
+          <div class="panel__hint" id="usersMeta">—</div>
+        </div>
+
+        <div id="adminError" class="placeholder" style="display: none"></div>
+
+        <div class="tablewrap">
+          <table class="table" aria-label="Ҷадвали корбарон">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>E-mail</th>
+                <th>Нақш</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="usersTbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="/static/auth.js?v=20260415-2"></script>
+    <script src="/static/admin.js?v=20260415-2"></script>
+  </body>
+</html>

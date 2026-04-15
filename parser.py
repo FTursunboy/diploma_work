@@ -37,12 +37,30 @@ def save_upload_file(upload_file) -> tuple[str, Path]:
     return extension, destination
 
 
-def create_uploaded_document(db: Session, filename: str, file_type: str, stored_path: Path) -> Document:
+def create_uploaded_document(
+    db: Session,
+    filename: str,
+    file_type: str,
+    stored_path: Path,
+    *,
+    title: str | None = None,
+    author: str | None = None,
+    publisher: str | None = None,
+    publication_year: int | None = None,
+    doc_type: str | None = None,
+    bibliography: str | None = None,
+) -> Document:
     document = Document(
         filename=filename,
         file_type=file_type,
         stored_path=str(stored_path),
         status="uploaded",
+        title=title,
+        author=author,
+        publisher=publisher,
+        publication_year=publication_year,
+        doc_type=doc_type,
+        bibliography=bibliography,
     )
     db.add(document)
     db.commit()
@@ -135,13 +153,34 @@ def parse_document(db: Session, document: Document) -> dict[str, int]:
         return {"paragraphs": 0, "sentences": 0, "words": 0}
 
 
-def load_document_from_path(db: Session, file_path: str) -> tuple[Document, dict[str, int]]:
+def load_document_from_path(
+    db: Session,
+    file_path: str,
+    *,
+    title: str | None = None,
+    author: str | None = None,
+    publisher: str | None = None,
+    publication_year: int | None = None,
+    doc_type: str | None = None,
+    bibliography: str | None = None,
+) -> tuple[Document, dict[str, int]]:
     source_path = Path(file_path)
     if not source_path.exists() or not source_path.is_file():
         raise ValueError("Файл ёфт нашуд.")
 
     file_type, stored_path = copy_file_to_storage(source_path)
-    document = create_uploaded_document(db, source_path.name, file_type, stored_path)
+    document = create_uploaded_document(
+        db,
+        source_path.name,
+        file_type,
+        stored_path,
+        title=title,
+        author=author,
+        publisher=publisher,
+        publication_year=publication_year,
+        doc_type=doc_type,
+        bibliography=bibliography,
+    )
     counts = parse_document(db, document)
     db.refresh(document)
     return document, counts

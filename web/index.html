@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Book Parser — Веб</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260409" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260415-2" />
   </head>
   <body>
     <header class="topbar">
@@ -17,6 +17,14 @@
             <div class="brand__subtitle">Боргузорӣ, таҳлил ва ҷустуҷӯ дар файлҳо</div>
           </div>
         </div>
+        <nav class="topbar__nav">
+          <span class="badge" id="userBadge" style="display: none"></span>
+          <a class="link" id="adminLink" href="/admin" style="display: none">Мудирият</a>
+          <a class="link" id="viewerLink" href="/viewer" style="display: none">Намоиш</a>
+          <a class="link" id="loginLink" href="/login">Воридшавӣ</a>
+          <a class="link" id="registerLink" href="/register">Бақайдгирӣ</a>
+          <button class="btn" id="logoutBtn" type="button" style="display: none">Баромадан</button>
+        </nav>
       </div>
     </header>
 
@@ -33,14 +41,13 @@
             <input id="docFilter" class="input" placeholder="Масалан: китоб.docx" autocomplete="off" />
           </label>
 
-          <form id="uploadForm" class="card">
-            <div class="card__title">Илова кардани файл</div>
+          <div id="uploadCard" class="card">
+            <div class="card__title">Илова кардани китоб</div>
             <div class="card__body">
-              <input id="uploadFile" class="file" type="file" accept=".pdf,.docx" />
-              <button id="uploadBtn" class="btn btn--primary" type="submit">Боргузорӣ</button>
-              <div class="muted">PDF ва DOCX дастгирӣ мешаванд</div>
+              <button id="openUploadModalBtn" class="btn btn--primary" type="button">Илова кардан</button>
+              <div class="muted">Барои moderator/admin: маълумоти китоб + файл (PDF/DOCX)</div>
             </div>
-          </form>
+          </div>
 
           <div id="docsList" class="list" aria-label="Рӯйхати файлҳо"></div>
         </div>
@@ -147,6 +154,10 @@
 
         <div id="viewNgrams" class="toolview">
           <form id="ngramsForm" class="toolform">
+            <label class="field toolform__wide">
+              <span class="field__label">Ҷустуҷӯи ибора (2–5 калима)</span>
+              <input id="ngramsQuery" class="input" placeholder="масалан: омӯзиши мошинӣ" autocomplete="off" />
+            </label>
             <label class="field">
               <span class="field__label">N</span>
               <select id="ngramsN" class="select">
@@ -206,6 +217,60 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="/static/app.js?v=20260409"></script>
+    <div id="uploadModal" class="modal" aria-hidden="true">
+      <div class="modal__backdrop" data-modal-close></div>
+      <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+        <div class="modal__header">
+          <div>
+            <div class="modal__title" id="uploadModalTitle">Илова кардани китоб</div>
+            <div class="modal__subtitle">Маълумоти библиографиро пур кунед ва файлро интихоб намоед</div>
+          </div>
+          <button class="btn btn--sm" type="button" data-modal-close aria-label="Пӯшидан">✕</button>
+        </div>
+
+        <form id="uploadModalForm" class="modal__body">
+          <div class="grid">
+            <label class="field">
+              <span class="field__label">Номи китоб</span>
+              <input id="metaTitle" class="input" placeholder="Масалан: Дохунда" required />
+            </label>
+            <label class="field">
+              <span class="field__label">Муаллиф</span>
+              <input id="metaAuthor" class="input" placeholder="Масалан: Садриддин Айнӣ" required />
+            </label>
+            <label class="field">
+              <span class="field__label">Соли нашр</span>
+              <input id="metaYear" class="input" type="number" min="0" max="2100" placeholder="Масалан: 1980" required />
+            </label>
+            <label class="field">
+              <span class="field__label">Нашркунанда (publisher)</span>
+              <input id="metaPublisher" class="input" placeholder="Масалан: Ирфон" required />
+            </label>
+            <label class="field field--wide">
+              <span class="field__label">Тавсифи библиографӣ</span>
+              <textarea
+                id="metaBib"
+                class="textarea"
+                rows="4"
+                placeholder="Масалан: С. Айнӣ. Дохунда. — Ирфон, 1980."
+                required
+              ></textarea>
+            </label>
+            <label class="field field--wide">
+              <span class="field__label">Файл (PDF/DOCX)</span>
+              <input id="uploadFile" class="file" type="file" accept=".pdf,.docx" required />
+            </label>
+          </div>
+
+          <div class="row row--end">
+            <button class="btn" type="button" data-modal-close>Бекор</button>
+            <button id="uploadBtn" class="btn btn--primary" type="submit">Боргузорӣ</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="/static/auth.js?v=20260415-2"></script>
+    <script src="/static/app.js?v=20260415-2"></script>
   </body>
 </html>

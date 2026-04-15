@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 import os
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engine, func, inspect, select, text
 from sqlalchemy.dialects import mysql as mysql_dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
@@ -34,6 +34,17 @@ class Base(DeclarativeBase):
     pass
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(80), nullable=False, unique=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(500), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="user", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -41,6 +52,15 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_type: Mapped[str] = mapped_column(String(10), nullable=False)
     stored_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    author: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    publisher: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doc_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    bibliography: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
     # full_text can be very large; use MEDIUMTEXT on MySQL to avoid "Data too long" errors
     full_text: Mapped[str | None] = mapped_column(
         Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
@@ -119,6 +139,114 @@ class Word(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _ensure_document_columns()
+    _ensure_user_columns()
+    _seed_admin_user()
+
+
+def _ensure_document_columns() -> None:
+    """Lightweight migration for additive columns (no Alembic in this repo)."""
+    inspector = inspect(engine)
+    try:
+        cols = {c["name"] for c in inspector.get_columns("documents")}
+    except Exception:
+        return
+
+    missing = []
+    for name in ("title", "author", "publisher", "publication_year", "doc_type", "bibliography"):
+        if name not in cols:
+            missing.append(name)
+
+    if not missing:
+        return
+
+    ddl_by_col = {
+        "title": "ALTER TABLE documents ADD COLUMN title VARCHAR(255) NULL",
+        "author": "ALTER TABLE documents ADD COLUMN author VARCHAR(255) NULL",
+        "publisher": "ALTER TABLE documents ADD COLUMN publisher VARCHAR(255) NULL",
+        "publication_year": "ALTER TABLE documents ADD COLUMN publication_year INTEGER NULL",
+        "doc_type": "ALTER TABLE documents ADD COLUMN doc_type VARCHAR(80) NULL",
+        "bibliography": "ALTER TABLE documents ADD COLUMN bibliography TEXT NULL",
+    }
+
+    with engine.begin() as conn:
+        for col in missing:
+            stmt = ddl_by_col.get(col)
+            if not stmt:
+                continue
+            conn.execute(text(stmt))
+
+
+def _ensure_user_columns() -> None:
+    inspector = inspect(engine)
+    try:
+        cols = {c["name"] for c in inspector.get_columns("users")}
+    except Exception:
+        return
+
+    if "email" in cols:
+        return
+
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(255) NULL"))
+        except Exception:
+            return
+
+        # Best-effort index/constraint (varies by DB).
+        try:
+            conn.execute(text("CREATE INDEX ix_users_email ON users (email)"))
+        except Exception:
+            pass
+
+
+def _seed_admin_user() -> None:
+    seed = (os.getenv("AUTH_SEED_ADMIN", "1") or "").strip().lower()
+    if seed in {"0", "false", "no", "off"}:
+        return
+
+    admin_email = (os.getenv("ADMIN_EMAIL", "admin@local") or "").strip().lower()
+    admin_password = os.getenv("ADMIN_PASSWORD", "admin12345") or ""
+    reset_pwd = (os.getenv("AUTH_SEED_ADMIN_RESET_PASSWORD", "0") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    if not admin_email:
+        return
+
+    try:
+        from auth import hash_password
+    except Exception:
+        return
+
+    db = SessionLocal()
+    try:
+        has_admin = db.scalar(select(func.count(User.id)).where(User.role == "admin"))
+        if int(has_admin or 0) > 0:
+            return
+
+        user = db.scalar(select(User).where((User.email == admin_email) | (User.username == admin_email)))
+        if user is None:
+            user = User(
+                username=admin_email,
+                email=admin_email,
+                password_hash=hash_password(admin_password),
+                role="admin",
+            )
+            db.add(user)
+            db.commit()
+            return
+
+        user.role = "admin"
+        if reset_pwd:
+            user.password_hash = hash_password(admin_password)
+        db.add(user)
+        db.commit()
+    finally:
+        db.close()
 
 
 def get_db() -> Generator[Session, None, None]:
