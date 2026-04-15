@@ -19,7 +19,6 @@ const state = {
 const els = {
   userBadge: document.getElementById("userBadge"),
   adminLink: document.getElementById("adminLink"),
-  viewerLink: document.getElementById("viewerLink"),
   loginLink: document.getElementById("loginLink"),
   registerLink: document.getElementById("registerLink"),
   logoutBtn: document.getElementById("logoutBtn"),
@@ -112,12 +111,11 @@ function setAuthNav(user) {
   if (!user) return;
   const who = user.email || user.username || "—";
   const role = String(user.role || "");
-  const roleLabel = role === "admin" ? "админ" : role === "moderator" ? "модератор" : "корбар";
+  const roleLabel = ["user", "moderator", "admin"].includes(role) ? role : "user";
   if (els.userBadge) {
     els.userBadge.style.display = "";
     els.userBadge.textContent = `${who} • ${roleLabel}`;
   }
-  if (els.viewerLink) els.viewerLink.style.display = "";
   if (els.adminLink) els.adminLink.style.display = role === "admin" ? "" : "none";
   if (els.loginLink) els.loginLink.style.display = "none";
   if (els.registerLink) els.registerLink.style.display = "none";
@@ -795,7 +793,7 @@ async function onConcordance(e) {
   } catch (err) {
     toast(`Хатои concordance: ${String(err.message || err)}`, "error");
   } finally {
-    setBusy(els.concordanceBtn, false, "Намоиш");
+    setBusy(els.concordanceBtn, false, "Показать");
   }
 }
 

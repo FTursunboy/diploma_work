@@ -116,11 +116,6 @@ def register_page():
     return serve_web_page("register.html")
 
 
-@app.get("/viewer", include_in_schema=False)
-def viewer_page():
-    return serve_web_page("viewer.html")
-
-
 @app.get("/admin", include_in_schema=False)
 def admin_page():
     return serve_web_page("admin.html")

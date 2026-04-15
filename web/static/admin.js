@@ -32,7 +32,7 @@
       els.userBadge.style.display = "";
       const who = me.email || me.username || "—";
       const role = String(me.role || "");
-      const roleLabel = role === "admin" ? "админ" : role === "moderator" ? "модератор" : "корбар";
+      const roleLabel = ["user", "moderator", "admin"].includes(role) ? role : "user";
       els.userBadge.textContent = `${who} • ${roleLabel}`;
     }
     if (els.logoutBtn) {
@@ -42,14 +42,14 @@
   }
 
   function updateMeta() {
-    if (els.usersMeta) els.usersMeta.textContent = `${users.length} корбар`;
+    if (els.usersMeta) els.usersMeta.textContent = `${users.length} пользователей`;
   }
 
   function roleOptions(selected) {
     const roles = [
-      { value: "user", label: "корбар" },
-      { value: "moderator", label: "модератор" },
-      { value: "admin", label: "админ" },
+      { value: "user", label: "user" },
+      { value: "moderator", label: "moderator" },
+      { value: "admin", label: "admin" },
     ];
     return roles
       .map((r) => `<option value="${r.value}" ${r.value === selected ? "selected" : ""}>${r.label}</option>`)
