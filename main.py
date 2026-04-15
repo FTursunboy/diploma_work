@@ -29,7 +29,7 @@ from search import search_paragraph, search_phrase, search_sentence, search_word
 
 
 init_db()
-app = FastAPI(title="Book Parser API")
+app = FastAPI(title="Китобхо API")
 
 BASE_DIR = Path(__file__).resolve().parent
 WEB_DIR = BASE_DIR / "web"
@@ -127,7 +127,7 @@ def root(request: Request):
     index_file = WEB_DIR / "index.html"
     if "text/html" in accept and index_file.exists():
         return FileResponse(str(index_file), media_type="text/html")
-    return {"message": "Book Parser API is running"}
+    return {"message": "Китобхо API is running"}
 
 
 @app.post("/auth/register")

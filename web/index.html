@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Book Parser — Веб</title>
+    <title>Китобхо — Веб</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/styles.css?v=20260415-4" />
   </head>
@@ -13,8 +13,8 @@
         <div class="brand">
           <div class="brand__mark" aria-hidden="true">BP</div>
           <div class="brand__text">
-            <div class="brand__title">Book Parser</div>
-            <div class="brand__subtitle">Боргузорӣ, таҳлил ва ҷустуҷӯ дар файлҳо</div>
+            <div class="brand__title">Китобхо</div>
+            <div class="brand__subtitle">Боргузорӣ, таҳлил ва ҷустуҷӯ дар Китобхо</div>
           </div>
         </div>
         <nav class="topbar__nav">
@@ -30,7 +30,7 @@
     <main class="layout">
       <aside class="panel">
         <div class="panel__header">
-          <h2 class="panel__title">Файлҳо</h2>
+          <h2 class="panel__title">Китобхо</h2>
           <div class="panel__hint" id="docsMeta">—</div>
         </div>
 
@@ -48,14 +48,14 @@
             </div>
           </div>
 
-          <div id="docsList" class="list" aria-label="Рӯйхати файлҳо"></div>
+          <div id="docsList" class="list" aria-label="Рӯйхати Китобхо"></div>
         </div>
       </aside>
 
       <section class="panel">
         <div class="panel__header">
           <h2 class="panel__title">Ҷустуҷӯ</h2>
-          <div class="panel__hint">Дар ҳамаи файлҳо ё дар файли интихобшуда</div>
+          <div class="panel__hint">Дар ҳамаи Китобхо ё дар файли интихобшуда</div>
         </div>
 
         <div class="tabs tabs--views" role="tablist" aria-label="Асбобҳо">
@@ -92,7 +92,7 @@
             <label class="field">
               <span class="field__label">Файл</span>
               <select id="searchDocument" class="select">
-                <option value="" selected>Ҳамаи файлҳо</option>
+                <option value="" selected>Ҳамаи Китобхо</option>
               </select>
             </label>
 
@@ -124,7 +124,7 @@
             <label class="field">
               <span class="field__label">Файл</span>
               <select id="concordanceDocument" class="select">
-                <option value="" selected>Ҳамаи файлҳо</option>
+                <option value="" selected>Ҳамаи Китобхо</option>
               </select>
             </label>
             <button id="concordanceBtn" class="btn btn--primary" type="submit">Показать</button>
@@ -147,7 +147,7 @@
             <label class="field">
               <span class="field__label">Файл</span>
               <select id="wordlistDocument" class="select">
-                <option value="" selected>Ҳамаи файлҳо</option>
+                <option value="" selected>Ҳамаи Китобхо</option>
               </select>
             </label>
             <label class="field">
@@ -162,7 +162,7 @@
           <form id="ngramsForm" class="toolform">
             <label class="field toolform__wide">
               <span class="field__label">Ҷустуҷӯи ибора (2–5 калима)</span>
-              <input id="ngramsQuery" class="input" placeholder="масалан: омӯзиши мошинӣ" autocomplete="off" />
+              <input id="ngramsQuery" class="input" placeholder="масалан: китоби бадеи" autocomplete="off" />
             </label>
             <label class="field">
               <span class="field__label">N</span>
@@ -175,7 +175,7 @@
             <label class="field">
               <span class="field__label">Файл</span>
               <select id="ngramsDocument" class="select">
-                <option value="" selected>Ҳамаи файлҳо</option>
+                <option value="" selected>Ҳамаи Китобхо</option>
               </select>
             </label>
             <label class="field">
@@ -277,6 +277,6 @@
     </div>
 
     <script src="/static/auth.js?v=20260415-3"></script>
-    <script src="/static/app.js?v=20260415-8"></script>
+    <script src="/static/app.js?v=20260415-10"></script>
   </body>
 </html>

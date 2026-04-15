@@ -16,7 +16,7 @@ SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
 def validate_extension(file_name: str) -> str:
     extension = Path(file_name).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
-        raise ValueError("Танҳо файлҳои PDF ва DOCX дастгирӣ мешаванд.")
+        raise ValueError("Танҳо Китобхои PDF ва DOCX дастгирӣ мешаванд.")
     return extension
 
 

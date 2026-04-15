@@ -185,7 +185,7 @@ function renderDocs() {
   if (!docs.length) {
     const empty = document.createElement("div");
     empty.className = "placeholder";
-    empty.textContent = filter ? "Ёфт нашуд." : "Ҳоло файлҳо нестанд. Файл боргузорӣ кунед.";
+    empty.textContent = filter ? "Ёфт нашуд." : "Ҳоло Китобхо нестанд. Файл боргузорӣ кунед.";
     els.docsList.appendChild(empty);
     return;
   }
@@ -211,7 +211,7 @@ function renderDocSelect(selectEl) {
   if (!selectEl) return;
   const current = selectEl.value;
   const options = [
-    { value: "", label: "Ҳамаи файлҳо" },
+    { value: "", label: "Ҳамаи Китобхо" },
     ...state.docs.map((d) => ({ value: String(d.id), label: `#${d.id} — ${docCitation(d)}` })),
   ];
 
@@ -252,7 +252,7 @@ async function refreshDocs({ keepSelection = true } = {}) {
     renderDocs();
     renderSelectedDoc();
   } catch (err) {
-    toast(`Рӯйхати файлҳоро бор карда нашуд: ${String(err.message || err)}`, "error");
+    toast(`Рӯйхати Китобхоро бор карда нашуд: ${String(err.message || err)}`, "error");
   }
 }
 
@@ -363,6 +363,8 @@ function renderStats(doc) {
 
   const status = normalizeStatus(doc.status);
   const error = doc.error_message ? `<span class="stats__error">${escapeHtml(doc.error_message)}</span>` : "";
+  const statusRow =
+    status === "Тайёр" ? "" : `<div class="stat"><div class="stat__k">Ҳолат</div><div class="stat__v">${escapeHtml(status)}</div></div>`;
 
   const author = doc.author ? `<div class="stat"><div class="stat__k">Муаллиф</div><div class="stat__v">${escapeHtml(doc.author)}</div></div>` : "";
   const publisher = doc.publisher
@@ -374,7 +376,7 @@ function renderStats(doc) {
       : "";
 
   els.docStats.innerHTML = `
-    <div class="stat"><div class="stat__k">Ҳолат</div><div class="stat__v">${escapeHtml(status)}</div></div>
+    ${statusRow}
     <div class="stat"><div class="stat__k">Абзатсҳо</div><div class="stat__v">${paragraphsCount}</div></div>
     <div class="stat"><div class="stat__k">Ҷумлаҳо</div><div class="stat__v">${sentencesCount}</div></div>
     <div class="stat"><div class="stat__k">Калимаҳо</div><div class="stat__v">${wordsCount}</div></div>
@@ -645,7 +647,7 @@ function renderResults(data, query) {
   const results = Array.isArray(data?.results) ? data.results : [];
   const target = String(data?.target || "");
   const docIds = new Set(results.map((r) => r?.document_id).filter(Boolean));
-  const docsHint = docIds.size > 1 ? ` • файлҳо: ${docIds.size}` : "";
+  const docsHint = docIds.size > 1 ? ` • Китобхо: ${docIds.size}` : "";
 
   if (target === "word") {
     els.resultsMeta.textContent = `«${query}» — ${total} маротиба${docsHint}`;
@@ -928,9 +930,22 @@ function renderNgramSearch(data) {
         <div class="result__doc">${escapeHtml(docName)}</div>
         <div class="badge badge--count">×${escapeHtml(count)}</div>
       </div>
-      <div class="result__text">Клик кунед, то файл кушода шавад.</div>
+      <div class="result__text">Кликните, чтобы показать совпадения в этом файле.</div>
     `;
-    card.addEventListener("click", () => selectDoc(it.document_id, { focus: null }));
+    card.addEventListener("click", async () => {
+      const docId = String(it?.document_id || "");
+      if (!docId) return;
+      if (els.searchQuery) els.searchQuery.value = query;
+      if (els.searchTarget) els.searchTarget.value = "phrase";
+      setWordModeVisibility();
+      if (els.searchDocument) els.searchDocument.value = docId;
+      setView("search");
+      try {
+        await performSearch({ query, target: "phrase", documentId: docId });
+      } catch (err) {
+        toast(`Хатои ҷустуҷӯ: ${String(err.message || err)}`, "error");
+      }
+    });
     els.resultsList.appendChild(card);
   }
 }

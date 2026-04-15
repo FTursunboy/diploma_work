@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Book Parser — Админка</title>
+    <title>Китобхо — Админка</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/styles.css?v=20260415-3" />
   </head>
@@ -13,14 +13,14 @@
         <div class="brand">
           <div class="brand__mark" aria-hidden="true">BP</div>
           <div class="brand__text">
-            <div class="brand__title">Book Parser</div>
-            <div class="brand__subtitle">Админка: нақшҳои корбарон</div>
+            <div class="brand__title">Китобхо</div>
+            <div class="brand__subtitle">Админка: роли пользователей</div>
           </div>
         </div>
         <nav class="topbar__nav">
           <span class="badge" id="userBadge" style="display: none"></span>
-          <a class="link" href="/">Ҳуҷҷатҳо</a>
-          <button class="btn" id="logoutBtn" type="button" style="display: none">Баромадан</button>
+          <a class="link" href="/">Документы</a>
+          <button class="btn" id="logoutBtn" type="button" style="display: none">Выйти</button>
         </nav>
       </div>
     </header>
@@ -28,24 +28,55 @@
     <main class="layout layout--center">
       <section class="panel">
         <div class="panel__header">
-          <h2 class="panel__title">Корбарон</h2>
-          <div class="panel__hint" id="usersMeta">—</div>
+          <h2 class="panel__title">Админка</h2>
+          <div class="panel__hint" id="adminMeta">—</div>
         </div>
 
         <div id="adminError" class="placeholder" style="display: none"></div>
 
-        <div class="tablewrap">
-          <table class="table" aria-label="Ҷадвали корбарон">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>E-mail</th>
-                <th>Нақш</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="usersTbody"></tbody>
-          </table>
+        <div class="tabs" role="tablist" aria-label="Разделы админки">
+          <button id="tabUsers" class="tab is-active" type="button" data-view="users">Пользователи</button>
+          <button id="tabFiles" class="tab" type="button" data-view="files">Файлы</button>
+        </div>
+
+        <div id="viewUsers" class="toolview is-active">
+          <div class="panel__header">
+            <h3 class="panel__title">Пользователи</h3>
+            <div class="panel__hint" id="usersMeta">—</div>
+          </div>
+          <div class="tablewrap">
+            <table class="table" aria-label="Таблица пользователей">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>E-mail</th>
+                  <th>Роль</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="usersTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="viewFiles" class="toolview">
+          <div class="panel__header">
+            <h3 class="panel__title">Файлы</h3>
+            <div class="panel__hint" id="filesMeta">—</div>
+          </div>
+          <div class="tablewrap">
+            <table class="table" aria-label="Таблица файлов">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Файл</th>
+                  <th>Тип</th>
+                  <th>Статус</th>
+                </tr>
+              </thead>
+              <tbody id="filesTbody"></tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>
@@ -53,6 +84,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="/static/auth.js?v=20260415-3"></script>
-    <script src="/static/admin.js?v=20260415-3"></script>
+    <script src="/static/admin.js?v=20260415-4"></script>
   </body>
 </html>
