@@ -25,9 +25,8 @@
         body: JSON.stringify({ email, password }),
       });
       Auth.setToken(data?.access_token || "");
-      const role = data?.user?.role || "";
       Auth.toast("Ҳисоб эҷод шуд.", "success");
-      window.location.href = role === "user" ? "/viewer" : "/";
+      window.location.href = "/";
     } catch (err) {
       Auth.toast(String(err?.message || err || "Хатои бақайдгирӣ"), "error");
     } finally {

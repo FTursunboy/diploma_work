@@ -9,8 +9,7 @@
   if (Auth.getToken()) {
     Auth.me()
       .then((u) => {
-        if (u?.role === "user") window.location.href = "/viewer";
-        else window.location.href = "/";
+        window.location.href = "/";
       })
       .catch(() => {
         Auth.clearToken();
@@ -36,9 +35,8 @@
         body: JSON.stringify({ email, password }),
       });
       Auth.setToken(data?.access_token || "");
-      const role = data?.user?.role || "";
       Auth.toast("Ворид шудед.", "success");
-      window.location.href = role === "user" ? "/viewer" : "/";
+      window.location.href = "/";
     } catch (err) {
       Auth.toast(String(err?.message || err || "Хатои воридшавӣ"), "error");
     } finally {

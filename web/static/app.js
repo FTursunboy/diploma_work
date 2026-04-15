@@ -946,10 +946,6 @@ async function init() {
   } catch (err) {
     return;
   }
-  if (state.me?.role === "user") {
-    window.location.href = "/viewer";
-    return;
-  }
 
   setAuthNav(state.me);
   setWordModeVisibility();
