@@ -7,6 +7,7 @@ const state = {
   selectedDoc: null,
   activeView: "search",
   activeTab: "text",
+  focus: null, // { documentId, paragraphIndex, sentenceIndex, query }
   wordFreqByDocId: new Map(),
   renderLimits: {
     paragraphs: 50,
@@ -54,6 +55,7 @@ const els = {
   concordanceBtn: document.getElementById("concordanceBtn"),
   wordlistForm: document.getElementById("wordlistForm"),
   wordlistFilter: document.getElementById("wordlistFilter"),
+  wordlistMode: document.getElementById("wordlistMode"),
   wordlistDocument: document.getElementById("wordlistDocument"),
   wordlistMinFreq: document.getElementById("wordlistMinFreq"),
   wordlistBtn: document.getElementById("wordlistBtn"),
@@ -136,9 +138,39 @@ function normalizeStatus(status) {
   return status || "—";
 }
 
-function docDisplayName(doc) {
-  const base = doc?.title || doc?.filename || `Файл #${doc?.id ?? "?"}`;
-  return `${base}`;
+function docTitleOrFallback(doc) {
+  const title = String(doc?.title || "").trim();
+  if (title) return title;
+  return inferTitleFromFilename(doc?.filename);
+}
+
+function docCitation(doc) {
+  if (!doc) return "";
+  const author = String(doc.author || "").trim();
+  const title = docTitleOrFallback(doc);
+  const year = doc.publication_year != null ? String(doc.publication_year) : "";
+
+  const parts = [];
+  if (author) parts.push(author);
+  if (title) parts.push(title);
+  const head = parts.join(" — ");
+  if (year) return head ? `${head} (${year})` : year;
+  return head || String(doc.filename || `Файл #${doc?.id ?? "?"}`);
+}
+
+function docFilterText(doc) {
+  const bits = [
+    docCitation(doc),
+    doc?.bibliography,
+    doc?.publisher,
+    doc?.doc_type,
+    doc?.filename,
+    doc?.file_type,
+    doc?.id != null ? `#${doc.id}` : "",
+  ]
+    .map((v) => String(v || "").trim())
+    .filter(Boolean);
+  return bits.join(" ").toLowerCase();
 }
 
 function updateDocsMeta() {
@@ -148,7 +180,7 @@ function updateDocsMeta() {
 function renderDocs() {
   const filter = (els.docFilter.value || "").trim().toLowerCase();
   const docs = filter
-    ? state.docs.filter((d) => docDisplayName(d).toLowerCase().includes(filter))
+    ? state.docs.filter((d) => docFilterText(d).includes(filter))
     : state.docs;
 
   els.docsList.innerHTML = "";
@@ -167,12 +199,12 @@ function renderDocs() {
     if (doc.id === state.selectedDocId) item.classList.add("is-active");
     item.innerHTML = `
       <div class="docitem__top">
-        <div class="docitem__name">${escapeHtml(docDisplayName(doc))}</div>
+        <div class="docitem__name">${escapeHtml(docCitation(doc))}</div>
         <div class="badge badge--${escapeHtml(doc.status)}">${escapeHtml(normalizeStatus(doc.status))}</div>
       </div>
       <div class="docitem__meta">#${doc.id} • ${escapeHtml(doc.file_type || "—")}</div>
     `;
-    item.addEventListener("click", () => selectDoc(doc.id));
+    item.addEventListener("click", () => selectDoc(doc.id, { focus: null }));
     els.docsList.appendChild(item);
   }
 }
@@ -182,7 +214,7 @@ function renderDocSelect(selectEl) {
   const current = selectEl.value;
   const options = [
     { value: "", label: "Ҳамаи файлҳо" },
-    ...state.docs.map((d) => ({ value: String(d.id), label: `#${d.id} — ${d.filename}` })),
+    ...state.docs.map((d) => ({ value: String(d.id), label: `#${d.id} — ${docCitation(d)}` })),
   ];
 
   selectEl.innerHTML = "";
@@ -345,7 +377,7 @@ function renderStats(doc) {
 
   els.docStats.innerHTML = `
     <div class="stat"><div class="stat__k">Ҳолат</div><div class="stat__v">${escapeHtml(status)}</div></div>
-    <div class="stat"><div class="stat__k">Бандҳо</div><div class="stat__v">${paragraphsCount}</div></div>
+    <div class="stat"><div class="stat__k">Абзатсҳо</div><div class="stat__v">${paragraphsCount}</div></div>
     <div class="stat"><div class="stat__k">Ҷумлаҳо</div><div class="stat__v">${sentencesCount}</div></div>
     <div class="stat"><div class="stat__k">Калимаҳо</div><div class="stat__v">${wordsCount}</div></div>
     ${author}
@@ -357,6 +389,34 @@ function renderStats(doc) {
 }
 
 function renderDocText(doc) {
+  const focus = state.focus;
+  if (focus && Number(focus.documentId) === Number(doc?.id) && focus.paragraphIndex != null) {
+    const paragraphs = Array.isArray(doc?.paragraphs) ? doc.paragraphs : [];
+    const indices = paragraphs
+      .map((x) => Number(x?.paragraph_index))
+      .filter((n) => Number.isFinite(n))
+      .sort((a, b) => a - b);
+    const p = paragraphs.find((x) => Number(x?.paragraph_index) === Number(focus.paragraphIndex));
+    const text = String(p?.text || "").trim();
+    if (text) {
+      const pos = indices.length ? indices.indexOf(Number(focus.paragraphIndex)) + 1 : 0;
+      const counter = pos > 0 ? ` (${pos}/${indices.length})` : "";
+      const prev = pos > 1 ? indices[pos - 2] : null;
+      const next = pos > 0 && pos < indices.length ? indices[pos] : null;
+
+      return `
+        <div class="focusbar">
+          <div class="focusbar__meta">Абзац ${escapeHtml(focus.paragraphIndex)}${escapeHtml(counter)}</div>
+          <div class="row">
+            <button class="btn btn--sm" type="button" data-focus="prev" ${prev == null ? "disabled" : ""}>←</button>
+            <button class="btn btn--sm" type="button" data-focus="next" ${next == null ? "disabled" : ""}>→</button>
+          </div>
+        </div>
+        <pre class="pre">${highlight(text, focus.query || "")}</pre>
+      `;
+    }
+  }
+
   const text = doc?.full_text || "";
   if (!text) return `<div class="placeholder">Матн холӣ аст.</div>`;
   return `<pre class="pre">${escapeHtml(text)}</pre>`;
@@ -384,7 +444,7 @@ function renderParagraphs(doc) {
     limit: state.renderLimits.paragraphs,
     renderItem: (p) => `
       <div class="vitem">
-        <div class="vitem__meta">Банд ${p.paragraph_index}</div>
+        <div class="vitem__meta">Абзатс ${p.paragraph_index}</div>
         <div class="vitem__text">${escapeHtml(p.text)}</div>
       </div>
     `,
@@ -398,7 +458,7 @@ function renderSentences(doc) {
     limit: state.renderLimits.sentences,
     renderItem: (s) => `
       <div class="vitem">
-        <div class="vitem__meta">Банд ${s.paragraph_index ?? "—"} • Ҷумла ${s.sentence_index}</div>
+        <div class="vitem__meta">Абзатс ${s.paragraph_index ?? "—"} • Ҷумла ${s.sentence_index}</div>
         <div class="vitem__text">${escapeHtml(s.text)}</div>
       </div>
     `,
@@ -466,7 +526,7 @@ function renderSelectedDoc() {
     return;
   }
 
-  els.docTitle.textContent = docDisplayName(doc);
+  els.docTitle.textContent = docCitation(doc);
   renderStats(doc);
 
   let html = "";
@@ -489,7 +549,14 @@ function renderSelectedDoc() {
   }
 }
 
-async function selectDoc(docId) {
+async function selectDoc(docId, { focus } = {}) {
+  if (focus === undefined) {
+    state.focus = null;
+  } else {
+    state.focus = focus;
+    if (state.focus && state.activeTab !== "text") setTab("text");
+  }
+
   state.selectedDocId = docId;
   renderDocs();
 
@@ -506,6 +573,44 @@ async function selectDoc(docId) {
     renderSelectedDoc();
     toast(`Файл бор карда нашуд: ${String(err.message || err)}`, "error");
   }
+}
+
+function setFocusForSelectedDoc(nextFocus) {
+  state.focus = nextFocus || null;
+  if (state.focus && state.activeTab !== "text") {
+    setTab("text");
+    return;
+  }
+  renderSelectedDoc();
+}
+
+function onDocBodyClick(e) {
+  const btn = e.target?.closest?.("[data-focus]");
+  if (!btn) return;
+  const action = btn.getAttribute("data-focus");
+  const doc = state.selectedDoc;
+  const focus = state.focus;
+  if (!doc || !focus || focus.paragraphIndex == null) return;
+
+  const paragraphs = Array.isArray(doc?.paragraphs) ? doc.paragraphs : [];
+  const indices = paragraphs
+    .map((x) => Number(x?.paragraph_index))
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b);
+  const pos = indices.indexOf(Number(focus.paragraphIndex));
+  if (pos < 0) return;
+
+  let nextIndex = null;
+  if (action === "prev" && pos > 0) nextIndex = indices[pos - 1];
+  if (action === "next" && pos + 1 < indices.length) nextIndex = indices[pos + 1];
+  if (nextIndex == null) return;
+
+  setFocusForSelectedDoc({
+    documentId: focus.documentId,
+    paragraphIndex: nextIndex,
+    sentenceIndex: null,
+    query: focus.query,
+  });
 }
 
 function setWordModeVisibility() {
@@ -561,8 +666,8 @@ function renderResults(data, query) {
 
   for (const r of results) {
     const doc = state.docsById.get(r.document_id);
-    const docName = doc?.filename || `Файл #${r.document_id}`;
-    const p = r.paragraph_index != null ? `Банд ${r.paragraph_index}` : null;
+    const docName = docCitation(doc) || `Файл #${r.document_id}`;
+    const p = r.paragraph_index != null ? `Абзатс ${r.paragraph_index}` : null;
     const s = r.sentence_index != null ? `Ҷумла ${r.sentence_index}` : null;
     const where = [p, s].filter(Boolean).join(" • ") || "—";
 
@@ -576,7 +681,16 @@ function renderResults(data, query) {
       </div>
       <div class="result__text">${highlight(String(r.text || ""), query)}</div>
     `;
-    card.addEventListener("click", () => selectDoc(r.document_id));
+    card.addEventListener("click", () =>
+      selectDoc(r.document_id, {
+        focus: {
+          documentId: r.document_id,
+          paragraphIndex: r.paragraph_index,
+          sentenceIndex: r.sentence_index,
+          query,
+        },
+      })
+    );
     els.resultsList.appendChild(card);
   }
 }
@@ -628,8 +742,9 @@ function renderConcordance(data) {
   if (!items.length) return renderToolEmpty("Мутобиқат нест.");
 
   for (const it of items) {
-    const docName = it?.filename || `Файл #${it?.document_id ?? "?"}`;
-    const p = it?.paragraph_index != null ? `Банд ${it.paragraph_index}` : null;
+    const doc = state.docsById.get(it?.document_id);
+    const docName = docCitation(doc) || it?.filename || `Файл #${it?.document_id ?? "?"}`;
+    const p = it?.paragraph_index != null ? `Абзатс ${it.paragraph_index}` : null;
     const s = it?.sentence_index != null ? `Ҷумла ${it.sentence_index}` : null;
     const where = [p, s].filter(Boolean).join(" • ") || "—";
 
@@ -649,7 +764,16 @@ function renderConcordance(data) {
         </div>
       </div>
     `;
-    card.addEventListener("click", () => selectDoc(it.document_id));
+    card.addEventListener("click", () =>
+      selectDoc(it.document_id, {
+        focus: {
+          documentId: it.document_id,
+          paragraphIndex: it.paragraph_index,
+          sentenceIndex: it.sentence_index,
+          query: String(els.concordanceQuery?.value || "").trim(),
+        },
+      })
+    );
     els.resultsList.appendChild(card);
   }
 }
@@ -678,7 +802,13 @@ async function onConcordance(e) {
 function renderWordlist(data, filterText) {
   const items = Array.isArray(data?.items) ? data.items : [];
   const filter = String(filterText || "").trim().toLowerCase();
-  const shown = items.filter((it) => !filter || String(it.word || "").toLowerCase().includes(filter));
+  const mode = String(els.wordlistMode?.value || "partial");
+  const shown = items.filter((it) => {
+    if (!filter) return true;
+    const w = String(it.word || "").toLowerCase();
+    if (mode === "exact") return w === filter;
+    return w.includes(filter);
+  });
 
   els.resultsMeta.textContent = `Wordlist: ${shown.length}`;
   els.resultsList.innerHTML = "";
@@ -703,11 +833,17 @@ function renderWordlist(data, filterText) {
       els.searchQuery.value = word;
       els.searchTarget.value = "word";
       setWordModeVisibility();
-      els.searchWordMode.value = "exact";
+      const mode = String(els.wordlistMode?.value || "exact");
+      els.searchWordMode.value = mode === "partial" ? "partial" : "exact";
       els.searchDocument.value = sourceDocId;
       setView("search");
       try {
-        await performSearch({ query: word, target: "word", documentId: sourceDocId || null, mode: "exact" });
+        await performSearch({
+          query: word,
+          target: "word",
+          documentId: sourceDocId || null,
+          mode: els.searchWordMode.value,
+        });
       } catch (err) {
         toast(`Хатои ҷустуҷӯ: ${String(err.message || err)}`, "error");
       }
@@ -782,7 +918,8 @@ function renderNgramSearch(data) {
   if (!items.length) return renderToolEmpty("Мутобиқат нест.");
 
   for (const it of items) {
-    const docName = it?.title || it?.filename || `Файл #${it?.document_id ?? "?"}`;
+    const doc = state.docsById.get(it?.document_id);
+    const docName = docCitation(doc) || it?.title || it?.filename || `Файл #${it?.document_id ?? "?"}`;
     const count = it?.count ?? 0;
 
     const card = document.createElement("button");
@@ -795,7 +932,7 @@ function renderNgramSearch(data) {
       </div>
       <div class="result__text">Клик кунед, то файл кушода шавад.</div>
     `;
-    card.addEventListener("click", () => selectDoc(it.document_id));
+    card.addEventListener("click", () => selectDoc(it.document_id, { focus: null }));
     els.resultsList.appendChild(card);
   }
 }
@@ -883,6 +1020,7 @@ function attachViewEvents() {
 
 function attachEvents() {
   els.docFilter.addEventListener("input", renderDocs);
+  if (els.docBody) els.docBody.addEventListener("click", onDocBodyClick);
   if (els.openUploadModalBtn) els.openUploadModalBtn.addEventListener("click", () => setModalOpen(true));
   if (els.uploadModalForm) els.uploadModalForm.addEventListener("submit", onUploadModalSubmit);
   if (els.uploadModal) {

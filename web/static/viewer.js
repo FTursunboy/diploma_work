@@ -42,8 +42,44 @@
     return status || "—";
   }
 
-  function docDisplayName(doc) {
-    return String(doc?.title || doc?.filename || `#${doc?.id ?? "?"}`);
+  function inferTitleFromFilename(name) {
+    const base = String(name || "").split(/[\\/]/).pop() || "";
+    return base.replace(/\.(pdf|docx)$/i, "").trim();
+  }
+
+  function docTitleOrFallback(doc) {
+    const title = String(doc?.title || "").trim();
+    if (title) return title;
+    return inferTitleFromFilename(doc?.filename);
+  }
+
+  function docCitation(doc) {
+    if (!doc) return "";
+    const author = String(doc.author || "").trim();
+    const title = docTitleOrFallback(doc);
+    const year = doc.publication_year != null ? String(doc.publication_year) : "";
+
+    const parts = [];
+    if (author) parts.push(author);
+    if (title) parts.push(title);
+    const head = parts.join(" — ");
+    if (year) return head ? `${head} (${year})` : year;
+    return head || String(doc.filename || `#${doc?.id ?? "?"}`);
+  }
+
+  function docFilterText(doc) {
+    const bits = [
+      docCitation(doc),
+      doc?.bibliography,
+      doc?.publisher,
+      doc?.doc_type,
+      doc?.filename,
+      doc?.file_type,
+      doc?.id != null ? `#${doc.id}` : "",
+    ]
+      .map((v) => String(v || "").trim())
+      .filter(Boolean);
+    return bits.join(" ").toLowerCase();
   }
 
   function updateUserNav() {
@@ -73,7 +109,7 @@
   function renderDocs() {
     const filter = (els.docFilter?.value || "").trim().toLowerCase();
     const docs = filter
-      ? state.docs.filter((d) => docDisplayName(d).toLowerCase().includes(filter))
+      ? state.docs.filter((d) => docFilterText(d).includes(filter))
       : state.docs;
 
     els.docsList.innerHTML = "";
@@ -92,7 +128,7 @@
       if (doc.id === state.selectedDocId) item.classList.add("is-active");
       item.innerHTML = `
         <div class="docitem__top">
-          <div class="docitem__name">${escapeHtml(docDisplayName(doc))}</div>
+          <div class="docitem__name">${escapeHtml(docCitation(doc))}</div>
           <div class="badge badge--${escapeHtml(doc.status)}">${escapeHtml(normalizeStatus(doc.status))}</div>
         </div>
         <div class="docitem__meta">#${doc.id} • ${escapeHtml(doc.file_type || "—")}</div>
@@ -146,7 +182,7 @@
 
     els.docStats.innerHTML = `
       <div class="stat"><div class="stat__k">Ҳолат</div><div class="stat__v">${escapeHtml(status)}</div></div>
-      <div class="stat"><div class="stat__k">Бандҳо</div><div class="stat__v">${paragraphsCount}</div></div>
+      <div class="stat"><div class="stat__k">Абзатсҳо</div><div class="stat__v">${paragraphsCount}</div></div>
       <div class="stat"><div class="stat__k">Ҷумлаҳо</div><div class="stat__v">${sentencesCount}</div></div>
       <div class="stat"><div class="stat__k">Калимаҳо</div><div class="stat__v">${wordsCount}</div></div>
       ${author}
@@ -187,7 +223,7 @@
       limit: state.renderLimits.paragraphs,
       renderItem: (p) => `
         <div class="vitem">
-          <div class="vitem__meta">Банд ${p.paragraph_index}</div>
+          <div class="vitem__meta">Абзатс ${p.paragraph_index}</div>
           <div class="vitem__text">${escapeHtml(p.text)}</div>
         </div>
       `,
@@ -201,7 +237,7 @@
       limit: state.renderLimits.sentences,
       renderItem: (s) => `
         <div class="vitem">
-          <div class="vitem__meta">Банд ${s.paragraph_index ?? "—"} • Ҷумла ${s.sentence_index}</div>
+          <div class="vitem__meta">Абзатс ${s.paragraph_index ?? "—"} • Ҷумла ${s.sentence_index}</div>
           <div class="vitem__text">${escapeHtml(s.text)}</div>
         </div>
       `,
@@ -265,7 +301,7 @@
       return;
     }
 
-    if (els.docTitle) els.docTitle.textContent = docDisplayName(doc);
+    if (els.docTitle) els.docTitle.textContent = docCitation(doc);
     renderStats(doc);
 
     let html = "";

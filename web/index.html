@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Book Parser — Веб</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260415-3" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260415-4" />
   </head>
   <body>
     <header class="topbar">
@@ -37,8 +37,8 @@
 
         <div class="stack">
           <label class="field">
-            <span class="field__label">Ҷустуҷӯ аз рӯи ном</span>
-            <input id="docFilter" class="input" placeholder="Масалан: китоб.docx" autocomplete="off" />
+            <span class="field__label">Ҷустуҷӯ аз рӯи библиография</span>
+            <input id="docFilter" class="input" placeholder="Масалан: Айнӣ, 1975" autocomplete="off" />
           </label>
 
           <div id="uploadCard" class="card">
@@ -83,10 +83,10 @@
             <label class="field">
               <span class="field__label">Намуд</span>
               <select id="searchTarget" class="select">
-                <option value="phrase" selected>Ибора (ҷумла + банд)</option>
+                <option value="phrase" selected>Ибора (ҷумла + Абзатс)</option>
                 <option value="word">Калима</option>
                 <option value="sentence">Ҷумла</option>
-                <option value="paragraph">Банд</option>
+                <option value="paragraph">Абзатс</option>
               </select>
             </label>
 
@@ -137,6 +137,13 @@
             <label class="field toolform__wide">
               <span class="field__label">Филтр (ихтиёрӣ)</span>
               <input id="wordlistFilter" class="input" placeholder="масалан: китоб" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span class="field__label">Режим</span>
+              <select id="wordlistMode" class="select">
+                <option value="partial" selected>Қисман</option>
+                <option value="exact">Дақиқ</option>
+              </select>
             </label>
             <label class="field">
               <span class="field__label">Файл</span>
@@ -198,7 +205,7 @@
               <div id="docStats" class="stats"></div>
               <div class="tabs" role="tablist" aria-label="Маълумоти файл">
                 <button class="tab is-active" type="button" data-tab="text">Матн</button>
-                <button class="tab" type="button" data-tab="paragraphs">Бандҳо</button>
+                <button class="tab" type="button" data-tab="paragraphs">Абзатсҳо</button>
                 <button class="tab" type="button" data-tab="sentences">Ҷумлаҳо</button>
                 <button class="tab" type="button" data-tab="words">Калимаҳо</button>
               </div>
@@ -271,6 +278,6 @@
     </div>
 
     <script src="/static/auth.js?v=20260415-3"></script>
-    <script src="/static/app.js?v=20260415-3"></script>
+    <script src="/static/app.js?v=20260415-8"></script>
   </body>
 </html>
