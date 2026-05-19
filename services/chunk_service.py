@@ -3,8 +3,8 @@ import os
 from splitter import normalize_text, split_paragraphs
 
 
-DEFAULT_MAX_CHUNK_TOKENS = 800
-DEFAULT_MIN_CHUNK_CHARS = 80
+DEFAULT_MAX_CHUNK_TOKENS = 320
+DEFAULT_MIN_CHUNK_CHARS = 40
 
 
 def _estimated_tokens(text: str) -> int:
@@ -21,7 +21,7 @@ def max_chunk_tokens() -> int:
         value = int(raw)
     except ValueError:
         return DEFAULT_MAX_CHUNK_TOKENS
-    return min(1000, max(500, value))
+    return min(600, max(120, value))
 
 
 def split_text_chunks(text: str, *, max_tokens: int | None = None) -> list[str]:

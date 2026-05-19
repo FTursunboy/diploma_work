@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Китобхо — Веб</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260415-4" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260519-8" />
   </head>
   <body>
     <header class="topbar">
@@ -44,7 +44,7 @@
             <div class="card__title">Илова кардани китоб</div>
             <div class="card__body">
               <button id="openUploadModalBtn" class="btn btn--primary" type="button">Илова кардан</button>
-              <div class="muted">Барои moderator/admin: маълумоти китоб + файл (PDF/DOCX)</div>
+              <div class="muted">Барои moderator/admin: маълумоти китоб + файл (PDF/DOC/DOCX)</div>
             </div>
           </div>
 
@@ -212,6 +212,7 @@
               <div id="docBody" class="doc" aria-label="Мундариҷаи файл">
                 <div class="placeholder">Файлро аз рӯйхати чап интихоб кунед.</div>
               </div>
+              <section id="docSummary" class="doc-summary-panel" aria-label="Шархи мухтасар" style="display: none"></section>
               <div class="row row--end">
                 <button id="downloadBtn" class="btn" type="button" disabled>Зеркашӣ</button>
                 <button id="deleteBtn" class="btn btn--danger" type="button" disabled>Нест кардан</button>
@@ -264,8 +265,8 @@
               ></textarea>
             </label>
             <label class="field field--wide">
-              <span class="field__label">Файл (PDF/DOCX)</span>
-              <input id="uploadFile" class="file" type="file" accept=".pdf,.docx" required />
+              <span class="field__label">Файл (PDF/DOC/DOCX)</span>
+              <input id="uploadFile" class="file" type="file" accept=".pdf,.doc,.docx" required />
             </label>
           </div>
 
@@ -278,6 +279,6 @@
     </div>
 
     <script src="/static/auth.js?v=20260415-3"></script>
-    <script src="/static/app.js?v=20260518-1"></script>
+    <script src="/static/app.js?v=20260519-7"></script>
   </body>
 </html>

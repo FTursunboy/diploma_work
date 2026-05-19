@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Китобхо — Админка</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/static/styles.css?v=20260415-3" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260519-8" />
   </head>
   <body>
     <header class="topbar">
@@ -25,27 +25,27 @@
       </div>
     </header>
 
-    <main class="layout layout--center">
-      <section class="panel">
-        <div class="panel__header">
+    <main class="layout layout--center admin-layout">
+      <section class="panel admin-panel">
+        <div class="panel__header admin-panel__header">
           <h2 class="panel__title">Админка</h2>
           <div class="panel__hint" id="adminMeta">—</div>
         </div>
 
         <div id="adminError" class="placeholder" style="display: none"></div>
 
-        <div class="tabs" role="tablist" aria-label="Разделы админки">
+        <div class="tabs admin-tabs" role="tablist" aria-label="Разделы админки">
           <button id="tabUsers" class="tab is-active" type="button" data-view="users">Пользователи</button>
           <button id="tabFiles" class="tab" type="button" data-view="files">Файлы</button>
           <button id="tabAiLogs" class="tab" type="button" data-view="aiLogs">AI-логи</button>
         </div>
 
-        <div id="viewUsers" class="toolview is-active">
-          <div class="panel__header">
+        <div id="viewUsers" class="toolview is-active admin-view">
+          <div class="panel__header admin-subheader">
             <h3 class="panel__title">Пользователи</h3>
             <div class="panel__hint" id="usersMeta">—</div>
           </div>
-          <div class="tablewrap">
+          <div class="tablewrap admin-tablewrap">
             <table class="table" aria-label="Таблица пользователей">
               <thead>
                 <tr>
@@ -60,12 +60,12 @@
           </div>
         </div>
 
-        <div id="viewFiles" class="toolview">
-          <div class="panel__header">
+        <div id="viewFiles" class="toolview admin-view">
+          <div class="panel__header admin-subheader">
             <h3 class="panel__title">Файлы</h3>
             <div class="panel__hint" id="filesMeta">—</div>
           </div>
-          <div class="tablewrap">
+          <div class="tablewrap admin-tablewrap">
             <table class="table" aria-label="Таблица файлов">
               <thead>
                 <tr>
@@ -80,12 +80,12 @@
           </div>
         </div>
 
-        <div id="viewAiLogs" class="toolview">
-          <div class="panel__header">
+        <div id="viewAiLogs" class="toolview admin-view">
+          <div class="panel__header admin-subheader">
             <h3 class="panel__title">AI-логи</h3>
             <div class="panel__hint" id="aiLogsMeta">—</div>
           </div>
-          <div class="tablewrap">
+          <div class="tablewrap admin-tablewrap">
             <table class="table" aria-label="Таблица AI-логов">
               <thead>
                 <tr>

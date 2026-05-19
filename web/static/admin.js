@@ -66,16 +66,28 @@
     }
   }
 
-  function normalizeStatus(status) {
-    if (status === "parsed") return "Готово";
-    if (status === "uploaded") return "Загружено";
-    if (status === "error") return "Ошибка";
-    return status || "—";
+  function getStatusView(doc) {
+    const status = String(doc?.status || "");
+    const aiStatus = String(doc?.ai_status || "");
+
+    if (status === "error" || aiStatus === "error") {
+      return { code: "error", label: "Ошибка" };
+    }
+    if (status === "parsed" && aiStatus && aiStatus !== "ready") {
+      return { code: "processing", label: "Подготавливается" };
+    }
+    if (status === "parsed") {
+      return { code: "parsed", label: "Готово" };
+    }
+    if (status === "uploaded") {
+      return { code: "uploaded", label: "Загружено" };
+    }
+    return { code: status || "default", label: status || "—" };
   }
 
   function inferTitleFromFilename(name) {
     const base = String(name || "").split(/[\\/]/).pop() || "";
-    return base.replace(/\.(pdf|docx)$/i, "").trim();
+    return base.replace(/\.(pdf|doc|docx)$/i, "").trim();
   }
 
   function docTitleOrFallback(doc) {
@@ -159,12 +171,11 @@
     }
 
     for (const d of docs) {
-      const statusRaw = String(d.status || "");
-      const statusLabel = normalizeStatus(statusRaw);
+      const statusView = getStatusView(d);
       const badge =
-        statusRaw && statusRaw !== "—"
-          ? `<span class="badge badge--${escapeHtml(statusRaw)}">${escapeHtml(statusLabel)}</span>`
-          : escapeHtml(statusLabel);
+        statusView.code && statusView.label !== "—"
+          ? `<span class="badge badge--${escapeHtml(statusView.code)}">${escapeHtml(statusView.label)}</span>`
+          : escapeHtml(statusView.label);
 
       const tr = document.createElement("tr");
       tr.innerHTML = `

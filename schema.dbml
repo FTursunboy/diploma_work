@@ -13,7 +13,7 @@ Table users {
 Table documents {
   id integer [primary key]
   filename varchar(255) [not null, note: 'Исходное имя загруженного файла']
-  file_type varchar(10) [not null, note: 'Тип файла: .pdf или .docx']
+  file_type varchar(10) [not null, note: 'Тип файла: .pdf, .doc или .docx']
   stored_path varchar(500) [not null, note: 'Путь хранения файла в системе']
   title varchar(255) [note: 'Название документа']
   author varchar(255) [note: 'Автор документа']
@@ -34,6 +34,18 @@ Table paragraphs {
   document_id integer [not null]
   paragraph_index integer [not null, note: 'Порядковый номер абзаца в документе']
   text text [not null, note: 'Текст абзаца']
+}
+
+Table paragraph_embedding_blocks {
+  id integer [primary key]
+  document_id integer [not null]
+  block_index integer [not null, note: 'Порядковый номер блока абзацев для embeddings']
+  start_paragraph_index integer [not null, note: 'Начальный абзац блока']
+  end_paragraph_index integer [not null, note: 'Конечный абзац блока']
+  block_text text [not null, note: 'Объединённый текст коротких/соседних абзацев']
+  embedding text [note: 'JSON-массив embedding-вектора блока']
+  embedding_model varchar(100) [note: 'Модель, которой был создан embedding блока']
+  created_at timestamp [not null, note: 'Дата и время создания блока']
 }
 
 Table sentences {
@@ -89,6 +101,8 @@ Ref document_words: words.document_id > documents.id
 Ref sentence_words: words.sentence_id > sentences.id
 
 Ref document_chunks_ref: document_chunks.document_id > documents.id
+
+Ref paragraph_embedding_blocks_ref: paragraph_embedding_blocks.document_id > documents.id
 
 Ref ai_logs_user_ref: ai_request_logs.user_id > users.id
 

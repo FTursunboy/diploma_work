@@ -116,6 +116,8 @@ class DocumentService:
         media_type = "application/octet-stream"
         if document.file_type == ".pdf":
             media_type = "application/pdf"
+        elif document.file_type == ".doc":
+            media_type = "application/msword"
         elif document.file_type == ".docx":
             media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 

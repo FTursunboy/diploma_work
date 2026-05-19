@@ -69,6 +69,7 @@ const els = {
   docTitle: document.getElementById("docTitle"),
   docStats: document.getElementById("docStats"),
   docBody: document.getElementById("docBody"),
+  docSummary: document.getElementById("docSummary"),
   downloadBtn: document.getElementById("downloadBtn"),
   deleteBtn: document.getElementById("deleteBtn"),
   toast: document.getElementById("toast"),
@@ -129,11 +130,23 @@ function setAuthNav(user) {
   if (els.deleteBtn) els.deleteBtn.style.display = role === "admin" ? "" : "none";
 }
 
-function normalizeStatus(status) {
-  if (status === "parsed") return "Тайёр";
-  if (status === "uploaded") return "Боргузорӣ шуд";
-  if (status === "error") return "Хато";
-  return status || "—";
+function getStatusView(doc) {
+  const status = String(doc?.status || "");
+  const aiStatus = String(doc?.ai_status || "");
+
+  if (status === "error" || aiStatus === "error") {
+    return { code: "error", label: "Хато" };
+  }
+  if (status === "parsed" && aiStatus && aiStatus !== "ready") {
+    return { code: "processing", label: "Омода шуда истодааст" };
+  }
+  if (status === "parsed") {
+    return { code: "parsed", label: "Тайёр" };
+  }
+  if (status === "uploaded") {
+    return { code: "uploaded", label: "Боргузорӣ шуд" };
+  }
+  return { code: status || "default", label: status || "—" };
 }
 
 function docTitleOrFallback(doc) {
@@ -195,10 +208,11 @@ function renderDocs() {
     item.type = "button";
     item.className = "docitem";
     if (doc.id === state.selectedDocId) item.classList.add("is-active");
+    const statusView = getStatusView(doc);
     item.innerHTML = `
       <div class="docitem__top">
         <div class="docitem__name">${escapeHtml(docCitation(doc))}</div>
-        <div class="badge badge--${escapeHtml(doc.status)}">${escapeHtml(normalizeStatus(doc.status))}</div>
+        <div class="badge badge--${escapeHtml(statusView.code)}">${escapeHtml(statusView.label)}</div>
       </div>
       <div class="docitem__meta">#${doc.id} • ${escapeHtml(doc.file_type || "—")}</div>
     `;
@@ -272,7 +286,7 @@ function setModalOpen(open) {
 
 function inferTitleFromFilename(name) {
   const base = String(name || "").split(/[\\/]/).pop() || "";
-  return base.replace(/\.(pdf|docx)$/i, "").trim();
+  return base.replace(/\.(pdf|doc|docx)$/i, "").trim();
 }
 
 function buildBibliography({ author, title, publisher, year }) {
@@ -291,7 +305,7 @@ function buildBibliography({ author, title, publisher, year }) {
 async function onUploadModalSubmit(e) {
   e.preventDefault();
   const file = els.uploadFile?.files?.[0];
-  if (!file) return toast("Файли PDF/DOCX-ро интихоб кунед.", "warning");
+  if (!file) return toast("Файли PDF/DOC/DOCX-ро интихоб кунед.", "warning");
 
   const title = String(els.metaTitle?.value || "").trim();
   const author = String(els.metaAuthor?.value || "").trim();
@@ -361,15 +375,18 @@ function renderStats(doc) {
   const sentencesCount = Array.isArray(doc.sentences) ? doc.sentences.length : 0;
   const wordsCount = Array.isArray(doc.words) ? doc.words.length : 0;
 
-  const status = normalizeStatus(doc.status);
+  const statusView = getStatusView(doc);
+  const status = statusView.label;
   const aiStatus = String(doc.ai_status || "");
-  const aiStatusLabel = { pending: "AI интизор", processing: "AI коркард", ready: "AI тайёр", error: "AI хато" }[aiStatus] || aiStatus;
   const error = doc.error_message ? `<span class="stats__error">${escapeHtml(doc.error_message)}</span>` : "";
   const statusRow =
-    status === "Тайёр" ? "" : `<div class="stat"><div class="stat__k">Ҳолат</div><div class="stat__v">${escapeHtml(status)}</div></div>`;
-  const aiStatusRow = aiStatus
-    ? `<div class="stat"><div class="stat__k">AI</div><div class="stat__v">${escapeHtml(aiStatusLabel)}</div></div>`
-    : "";
+    statusView.code === "parsed" ? "" : `<div class="stat"><div class="stat__k">Ҳолат</div><div class="stat__v">${escapeHtml(status)}</div></div>`;
+  const aiStatusRow =
+    aiStatus && aiStatus !== "ready" && aiStatus !== "processing"
+      ? `<div class="stat"><div class="stat__k">AI</div><div class="stat__v">${escapeHtml(
+          { pending: "AI интизор", error: "AI хато" }[aiStatus] || aiStatus
+        )}</div></div>`
+      : "";
 
   const author = doc.author ? `<div class="stat"><div class="stat__k">Муаллиф</div><div class="stat__v">${escapeHtml(doc.author)}</div></div>` : "";
   const publisher = doc.publisher
@@ -379,10 +396,6 @@ function renderStats(doc) {
     doc.publication_year != null
       ? `<div class="stat"><div class="stat__k">Сол</div><div class="stat__v">${escapeHtml(doc.publication_year)}</div></div>`
       : "";
-  const aiSummary = doc.ai_summary
-    ? `<div class="stat stat--wide"><div class="stat__k">AI-аннотация</div><div class="stat__v">${escapeHtml(doc.ai_summary)}</div></div>`
-    : "";
-
   els.docStats.innerHTML = `
     ${statusRow}
     ${aiStatusRow}
@@ -392,10 +405,24 @@ function renderStats(doc) {
     ${author}
     ${publisher}
     ${year}
-    ${aiSummary}
     ${doc.bibliography ? `<div class="stat stat--wide"><div class="stat__k">Библиография</div><div class="stat__v">${escapeHtml(doc.bibliography)}</div></div>` : ""}
     ${error ? `<div class="stat stat--wide">${error}</div>` : ""}
   `;
+}
+
+function renderDocSummary(doc) {
+  if (!els.docSummary) return;
+  if (!doc?.ai_summary) {
+    els.docSummary.innerHTML = "";
+    els.docSummary.style.display = "none";
+    return;
+  }
+
+  els.docSummary.innerHTML = `
+    <div class="doc-summary-panel__title">Шархи мухтасар</div>
+    <div class="doc-summary-panel__text">${escapeHtml(doc.ai_summary)}</div>
+  `;
+  els.docSummary.style.display = "";
 }
 
 function renderDocText(doc) {
@@ -530,6 +557,7 @@ function renderSelectedDoc() {
   if (!doc) {
     els.docTitle.textContent = "—";
     els.docBody.innerHTML = `<div class="placeholder">Файлро аз рӯйхати чап интихоб кунед.</div>`;
+    renderDocSummary(null);
     renderStats(null);
     els.downloadBtn.disabled = true;
     els.deleteBtn.disabled = true;
@@ -546,6 +574,7 @@ function renderSelectedDoc() {
   if (state.activeTab === "words") html = renderWords(doc);
 
   els.docBody.innerHTML = html;
+  renderDocSummary(doc);
   els.downloadBtn.disabled = false;
   els.deleteBtn.disabled = !(state.me && state.me.role === "admin");
 
@@ -571,6 +600,7 @@ async function selectDoc(docId, { focus } = {}) {
   renderDocs();
 
   els.docBody.innerHTML = `<div class="placeholder">Файл бор мешавад…</div>`;
+  renderDocSummary(null);
   els.downloadBtn.disabled = true;
   els.deleteBtn.disabled = true;
 
@@ -681,12 +711,10 @@ function renderResults(data, query) {
     const docName = docCitation(doc) || `Файл #${r.document_id}`;
     const p = r.paragraph_index != null ? `Абзатс ${r.paragraph_index}` : null;
     const s = r.sentence_index != null ? `Ҷумла ${r.sentence_index}` : null;
-    const c = target === "semantic" && r.chunk_index != null ? `Chunk ${r.chunk_index}` : null;
-    const score = target === "semantic" && r.score != null ? `Score ${Number(r.score).toFixed(4)}` : null;
     const where = [p, s].filter(Boolean).join(" • ") || "—";
-    const semanticWhere = [c, score].filter(Boolean).join(" • ");
+    const semanticWhere = [p].filter(Boolean).join(" • ");
     const finalWhere = target === "semantic" ? semanticWhere || where : where;
-    const resultText = target === "semantic" ? String(r.chunk_text || "") : String(r.text || "");
+    const resultText = target === "semantic" ? String(r.text || r.paragraph_text || r.chunk_text || "") : String(r.text || "");
 
     const card = document.createElement("button");
     card.type = "button";
@@ -696,7 +724,7 @@ function renderResults(data, query) {
         <div class="result__doc">${escapeHtml(docName)}</div>
         <div class="result__where">${escapeHtml(finalWhere)}</div>
       </div>
-      <div class="result__text">${target === "semantic" ? escapeHtml(resultText) : highlight(resultText, query)}</div>
+      <div class="result__text">${target === "semantic" ? highlight(resultText, query) : highlight(resultText, query)}</div>
     `;
     card.addEventListener("click", () =>
       selectDoc(r.document_id, {

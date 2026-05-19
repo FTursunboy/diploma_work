@@ -98,6 +98,11 @@ class Document(Base):
         cascade="all, delete-orphan",
         order_by="DocumentChunk.chunk_index",
     )
+    paragraph_blocks: Mapped[list["ParagraphEmbeddingBlock"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="ParagraphEmbeddingBlock.block_index",
+    )
 
 
 class Paragraph(Base):
@@ -107,6 +112,11 @@ class Paragraph(Base):
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), nullable=False, index=True)
     paragraph_index: Mapped[int] = mapped_column(Integer, nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     document: Mapped["Document"] = relationship(back_populates="paragraphs")
     sentences: Mapped[list["Sentence"]] = relationship(
@@ -167,6 +177,28 @@ class DocumentChunk(Base):
     document: Mapped["Document"] = relationship(back_populates="chunks")
 
 
+class ParagraphEmbeddingBlock(Base):
+    __tablename__ = "paragraph_embedding_blocks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), nullable=False, index=True)
+    block_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_paragraph_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_paragraph_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    block_text: Mapped[str] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=False,
+    )
+    embedding: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    document: Mapped["Document"] = relationship(back_populates="paragraph_blocks")
+
+
 class AiRequestLog(Base):
     __tablename__ = "ai_request_logs"
 
@@ -197,6 +229,8 @@ class AiRequestLog(Base):
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_document_columns()
+    _ensure_paragraph_columns()
+    _ensure_paragraph_block_table()
     _ensure_user_columns()
     _seed_admin_user()
 
@@ -266,6 +300,78 @@ def _ensure_user_columns() -> None:
             conn.execute(text("CREATE INDEX ix_users_email ON users (email)"))
         except Exception:
             pass
+
+
+def _ensure_paragraph_columns() -> None:
+    inspector = inspect(engine)
+    try:
+        cols = {c["name"] for c in inspector.get_columns("paragraphs")}
+    except Exception:
+        return
+
+    missing = []
+    for name in ("embedding", "embedding_model"):
+        if name not in cols:
+            missing.append(name)
+
+    if not missing:
+        return
+
+    ddl_by_col = {
+        "embedding": "ALTER TABLE paragraphs ADD COLUMN embedding TEXT NULL",
+        "embedding_model": "ALTER TABLE paragraphs ADD COLUMN embedding_model VARCHAR(100) NULL",
+    }
+
+    with engine.begin() as conn:
+        for col in missing:
+            stmt = ddl_by_col.get(col)
+            if not stmt:
+                continue
+            conn.execute(text(stmt))
+
+
+def _ensure_paragraph_block_table() -> None:
+    inspector = inspect(engine)
+    try:
+        tables = set(inspector.get_table_names())
+    except Exception:
+        return
+
+    if "paragraph_embedding_blocks" in tables:
+        return
+
+    ddl = """
+    CREATE TABLE paragraph_embedding_blocks (
+        id INTEGER PRIMARY KEY AUTO_INCREMENT,
+        document_id INTEGER NOT NULL,
+        block_index INTEGER NOT NULL,
+        start_paragraph_index INTEGER NOT NULL,
+        end_paragraph_index INTEGER NOT NULL,
+        block_text MEDIUMTEXT NOT NULL,
+        embedding MEDIUMTEXT NULL,
+        embedding_model VARCHAR(100) NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX ix_paragraph_embedding_blocks_document_id (document_id)
+    )
+    """
+
+    if str(engine.url).startswith("sqlite"):
+        ddl = """
+        CREATE TABLE paragraph_embedding_blocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            block_index INTEGER NOT NULL,
+            start_paragraph_index INTEGER NOT NULL,
+            end_paragraph_index INTEGER NOT NULL,
+            block_text TEXT NOT NULL,
+            embedding TEXT NULL,
+            embedding_model VARCHAR(100) NULL,
+            created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+
+    with engine.begin() as conn:
+        conn.execute(text(ddl))
 
 
 def _seed_admin_user() -> None:

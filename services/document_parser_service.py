@@ -1,4 +1,5 @@
 import json
+import subprocess
 import shutil
 import threading
 from pathlib import Path
@@ -6,9 +7,10 @@ from uuid import uuid4
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database import Document, DocumentChunk, Paragraph, Sentence, SessionLocal, UPLOAD_DIR, Word
+from database import Document, DocumentChunk, Paragraph, ParagraphEmbeddingBlock, Sentence, SessionLocal, UPLOAD_DIR, Word
 from services.ai_log_service import AiLogService
 from services.chunk_service import split_text_chunks
 from services.embedding_service import EmbeddingService
@@ -16,7 +18,7 @@ from services.summary_service import SummaryService
 from splitter import normalize_text, split_paragraphs, split_sentences, split_words
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
+SUPPORTED_EXTENSIONS = {".pdf", ".doc", ".docx"}
 
 
 class DocumentParserService:
@@ -26,7 +28,7 @@ class DocumentParserService:
     def validate_extension(self, file_name: str) -> str:
         extension = Path(file_name).suffix.lower()
         if extension not in SUPPORTED_EXTENSIONS:
-            raise ValueError("Танҳо файлҳои PDF ва DOCX дастгирӣ мешаванд.")
+            raise ValueError("Танҳо файлҳои PDF, DOC ва DOCX дастгирӣ мешаванд.")
         return extension
 
     def copy_file_to_storage(self, source_path: Path) -> tuple[str, Path]:
@@ -86,9 +88,61 @@ class DocumentParserService:
         paragraph_texts = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
         return normalize_text("\n\n".join(paragraph_texts))
 
+    def _is_rtf_file(self, file_path: Path) -> bool:
+        try:
+            header = file_path.read_bytes()[:32]
+        except OSError:
+            return False
+        return header.lstrip().startswith(b"{\\rtf")
+
+    def extract_rtf_text(self, file_path: Path) -> str:
+        try:
+            result = subprocess.run(
+                ["unrtf", "--text", str(file_path)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                check=True,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError("Утилита unrtf не установлена. Пересоберите Docker-образ.") from exc
+        except subprocess.CalledProcessError as exc:
+            error_text = (exc.stderr or exc.stdout or "").strip()
+            raise RuntimeError(error_text or "Не удалось извлечь текст из RTF-файла.") from exc
+
+        cleaned = "\n".join(
+            line for line in (result.stdout or "").splitlines() if not line.startswith("### ")
+        )
+        return normalize_text(cleaned)
+
+    def extract_doc_text(self, file_path: Path) -> str:
+        if self._is_rtf_file(file_path):
+            return self.extract_rtf_text(file_path)
+        try:
+            result = subprocess.run(
+                ["antiword", str(file_path)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                check=True,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError("Утилита antiword не установлена. Пересоберите Docker-образ.") from exc
+        except subprocess.CalledProcessError as exc:
+            error_text = (exc.stderr or exc.stdout or "").strip()
+            if "Rich Text Format file" in error_text or "probably a Rich Text Format file" in error_text:
+                return self.extract_rtf_text(file_path)
+            raise RuntimeError(error_text or "Не удалось извлечь текст из DOC-файла.") from exc
+
+        return normalize_text(result.stdout or "")
+
     def extract_text(self, file_path: Path, file_type: str) -> str:
         if file_type == ".pdf":
             return self.extract_pdf_text(file_path)
+        if file_type == ".doc":
+            return self.extract_doc_text(file_path)
         if file_type == ".docx":
             return self.extract_docx_text(file_path)
         raise ValueError("Формати файл дастгирӣ намешавад.")
@@ -180,6 +234,7 @@ class DocumentParserService:
             structured_text = self.extract_text(Path(document.stored_path), document.file_type)
             if not structured_text:
                 structured_text = document.full_text or ""
+            self.index_document_paragraphs(document=document)
             self.index_document_chunks(document=document, structured_text=structured_text)
             SummaryService(self._db).generate_for_document(document=document, text=structured_text)
             document.ai_status = "ready"
@@ -258,6 +313,149 @@ class DocumentParserService:
 
         self._db.commit()
         return created
+
+    def index_document_paragraphs(self, *, document: Document) -> int:
+        if self._db is None:
+            raise RuntimeError("Database session is required for index_document_paragraphs().")
+
+        paragraphs = self._db.scalars(
+            select(Paragraph).where(Paragraph.document_id == document.id).order_by(Paragraph.paragraph_index)
+        ).all()
+        if not paragraphs:
+            return 0
+
+        self._db.query(ParagraphEmbeddingBlock).filter(ParagraphEmbeddingBlock.document_id == document.id).delete()
+
+        embedding_service = None
+        if EmbeddingService.is_configured():
+            try:
+                embedding_service = EmbeddingService()
+            except Exception:
+                embedding_service = None
+
+        blocks = self._build_paragraph_blocks(paragraphs)
+        created = 0
+        for paragraph in paragraphs:
+            paragraph.embedding = None
+            paragraph.embedding_model = None
+            self._db.add(paragraph)
+
+        for block_index, block in enumerate(blocks, start=1):
+            embedding_json = None
+            embedding_model = None
+            if embedding_service is not None:
+                started_model = embedding_service.model
+                try:
+                    result = embedding_service.get_embedding_result(block["text"])
+                    embedding_json = json.dumps(result.embedding, separators=(",", ":"))
+                    embedding_model = result.model
+                    AiLogService(self._db).create(
+                        operation="embedding_paragraph_block",
+                        status="success",
+                        document_id=document.id,
+                        model=result.model,
+                        request_text=block["text"],
+                        response_text=(
+                            f"start={block['start_paragraph_index']}; end={block['end_paragraph_index']}; "
+                            f"vector_dimensions={len(result.embedding)}"
+                        ),
+                        prompt_tokens=result.prompt_tokens,
+                        total_tokens=result.total_tokens,
+                        duration_ms=result.duration_ms,
+                    )
+                except Exception as exc:
+                    embedding_model = started_model
+                    AiLogService(self._db).create(
+                        operation="embedding_paragraph_block",
+                        status="error",
+                        document_id=document.id,
+                        model=started_model,
+                        request_text=block["text"],
+                        error_message=str(exc),
+                    )
+
+            self._db.add(
+                ParagraphEmbeddingBlock(
+                    document_id=document.id,
+                    block_index=block_index,
+                    start_paragraph_index=block["start_paragraph_index"],
+                    end_paragraph_index=block["end_paragraph_index"],
+                    block_text=block["text"],
+                    embedding=embedding_json,
+                    embedding_model=embedding_model,
+                )
+            )
+            created += 1
+
+        self._db.commit()
+        return created
+
+    def _build_paragraph_blocks(self, paragraphs: list[Paragraph]) -> list[dict[str, int | str]]:
+        min_chars = 140
+        target_chars = 260
+        max_chars = 700
+        max_paragraphs = 6
+
+        blocks: list[dict[str, int | str]] = []
+        current_texts: list[str] = []
+        current_indexes: list[int] = []
+
+        def flush() -> None:
+            nonlocal current_texts, current_indexes
+            if not current_texts or not current_indexes:
+                current_texts = []
+                current_indexes = []
+                return
+            block_text = "\n\n".join(current_texts).strip()
+            if block_text:
+                blocks.append(
+                    {
+                        "start_paragraph_index": current_indexes[0],
+                        "end_paragraph_index": current_indexes[-1],
+                        "text": block_text,
+                    }
+                )
+            current_texts = []
+            current_indexes = []
+
+        for paragraph in paragraphs:
+            text_value = " ".join((paragraph.text or "").split())
+            if not text_value:
+                continue
+
+            paragraph_length = len(text_value)
+            current_length = sum(len(item) for item in current_texts)
+            current_count = len(current_texts)
+
+            if not current_texts:
+                current_texts.append(text_value)
+                current_indexes.append(int(paragraph.paragraph_index))
+                if paragraph_length >= target_chars:
+                    flush()
+                continue
+
+            should_merge = (
+                current_length < min_chars
+                or paragraph_length < min_chars
+                or current_count < 2
+            )
+            would_exceed = current_length + paragraph_length > max_chars or current_count >= max_paragraphs
+
+            if not should_merge or would_exceed:
+                if current_length >= min_chars:
+                    flush()
+                elif would_exceed:
+                    flush()
+
+            current_texts.append(text_value)
+            current_indexes.append(int(paragraph.paragraph_index))
+
+            current_length = sum(len(item) for item in current_texts)
+            if current_length >= target_chars and paragraph_length >= min_chars:
+                flush()
+
+        flush()
+        return blocks
 
     def load_document_from_path(
         self,

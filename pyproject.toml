@@ -1,7 +1,7 @@
 [project]
 name = "book-processor"
 version = "0.1.0"
-description = "Simple API service for uploading, parsing and searching PDF and DOCX books."
+description = "Simple API service for uploading, parsing and searching PDF, DOC and DOCX books."
 requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115.0,<1.0.0",
