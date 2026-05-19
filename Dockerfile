@@ -10,7 +10,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./
-COPY main.py parser.py splitter.py database.py search.py auth.py ./
+COPY main.py parser.py splitter.py database.py search.py auth.py config.py ./
 COPY routers ./routers
 COPY services ./services
 COPY web ./web

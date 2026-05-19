@@ -7,6 +7,9 @@ services:
       dockerfile: Dockerfile
     container_name: book-parser-api
     restart: unless-stopped
+    env_file:
+      - .env
+      - .ENV
     ports:
       - "8000:8000"
     volumes:
@@ -27,9 +30,6 @@ services:
       - AUTH_SECRET=change-me-in-prod
       - ADMIN_EMAIL=admin@local
       - ADMIN_PASSWORD=admin12345
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
-      - OPENAI_SUMMARY_MODEL=${OPENAI_SUMMARY_MODEL:-gpt-5-nano}
 
   db:
     image: mysql:8.1

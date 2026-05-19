@@ -7,6 +7,11 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engin
 from sqlalchemy.dialects import mysql as mysql_dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
+from config import load_environment
+
+
+load_environment()
+
 
 BASE_DIR = Path(__file__).resolve().parent
 STORAGE_DIR = BASE_DIR / "storage"

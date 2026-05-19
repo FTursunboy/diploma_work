@@ -2,6 +2,11 @@ import os
 import time
 from dataclasses import dataclass
 
+from config import load_environment
+
+
+load_environment()
+
 
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
 

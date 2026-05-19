@@ -226,6 +226,20 @@ class DocumentParserService:
         if document is None or document.status != "parsed":
             return
 
+        if not EmbeddingService.is_configured():
+            message = "OPENAI_API_KEY is not configured."
+            document.ai_status = "error"
+            document.error_message = message
+            self._db.add(document)
+            self._db.commit()
+            AiLogService(self._db).create(
+                operation="ai_processing",
+                status="error",
+                document_id=document.id,
+                error_message=message,
+            )
+            return
+
         document.ai_status = "processing"
         self._db.add(document)
         self._db.commit()
