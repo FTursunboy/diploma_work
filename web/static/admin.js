@@ -8,17 +8,22 @@
     adminError: document.getElementById("adminError"),
     tabUsers: document.getElementById("tabUsers"),
     tabFiles: document.getElementById("tabFiles"),
+    tabAiLogs: document.getElementById("tabAiLogs"),
     viewUsers: document.getElementById("viewUsers"),
     viewFiles: document.getElementById("viewFiles"),
+    viewAiLogs: document.getElementById("viewAiLogs"),
     usersMeta: document.getElementById("usersMeta"),
     usersTbody: document.getElementById("usersTbody"),
     filesMeta: document.getElementById("filesMeta"),
     filesTbody: document.getElementById("filesTbody"),
+    aiLogsMeta: document.getElementById("aiLogsMeta"),
+    aiLogsTbody: document.getElementById("aiLogsTbody"),
   };
 
   let me = null;
   let users = [];
   let docs = [];
+  let aiLogs = [];
   let activeView = "users";
 
   function escapeHtml(value) {
@@ -112,6 +117,10 @@
     if (els.filesMeta) els.filesMeta.textContent = `${docs.length} файлов`;
   }
 
+  function updateAiLogsMeta() {
+    if (els.aiLogsMeta) els.aiLogsMeta.textContent = `${aiLogs.length} записей`;
+  }
+
   function renderUsers() {
     if (!els.usersTbody) return;
     els.usersTbody.innerHTML = "";
@@ -171,6 +180,53 @@
     }
   }
 
+  function formatDate(value) {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString();
+  }
+
+  function renderAiLogs() {
+    if (!els.aiLogsTbody) return;
+    els.aiLogsTbody.innerHTML = "";
+
+    if (!aiLogs.length) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="5"><div class="placeholder">AI-логов пока нет.</div></td>`;
+      els.aiLogsTbody.appendChild(tr);
+      return;
+    }
+
+    for (const log of aiLogs) {
+      const status = String(log.status || "");
+      const badge = status
+        ? `<span class="badge badge--${escapeHtml(status)}">${escapeHtml(status)}</span>`
+        : "—";
+      const tokens = [
+        log.prompt_tokens != null ? `prompt: ${log.prompt_tokens}` : null,
+        log.total_tokens != null ? `total: ${log.total_tokens}` : null,
+        log.duration_ms != null ? `${log.duration_ms} ms` : null,
+      ].filter(Boolean).join(" • ") || "—";
+      const result = log.status === "error" ? log.error_message : log.response_text;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td class="mono">${escapeHtml(log.id)}</td>
+        <td>
+          <div>${badge} ${escapeHtml(log.operation || "—")}</div>
+          <div class="muted mono">${escapeHtml(log.model || "—")}</div>
+          <div class="muted">${escapeHtml(formatDate(log.created_at))}</div>
+          <div class="muted">doc: ${escapeHtml(log.document_id ?? "—")} • user: ${escapeHtml(log.user_id ?? "—")}</div>
+        </td>
+        <td><pre class="pre pre--cell">${escapeHtml(log.request_text || "—")}</pre></td>
+        <td><pre class="pre pre--cell">${escapeHtml(result || "—")}</pre></td>
+        <td class="mono">${escapeHtml(tokens)}</td>
+      `;
+      els.aiLogsTbody.appendChild(tr);
+    }
+  }
+
   async function refreshUsers() {
     users = await Auth.fetchJson("/admin/users");
     if (!Array.isArray(users)) users = [];
@@ -183,6 +239,13 @@
     if (!Array.isArray(docs)) docs = [];
     updateFilesMeta();
     renderFiles();
+  }
+
+  async function refreshAiLogs() {
+    aiLogs = await Auth.fetchJson("/admin/ai-logs?limit=100");
+    if (!Array.isArray(aiLogs)) aiLogs = [];
+    updateAiLogsMeta();
+    renderAiLogs();
   }
 
   async function onSave(userIdRaw) {
@@ -212,16 +275,21 @@
   }
 
   function setView(view) {
-    activeView = view === "files" ? "files" : "users";
+    activeView = ["files", "aiLogs"].includes(view) ? view : "users";
 
     if (els.tabUsers) els.tabUsers.classList.toggle("is-active", activeView === "users");
     if (els.tabFiles) els.tabFiles.classList.toggle("is-active", activeView === "files");
+    if (els.tabAiLogs) els.tabAiLogs.classList.toggle("is-active", activeView === "aiLogs");
 
     if (els.viewUsers) els.viewUsers.classList.toggle("is-active", activeView === "users");
     if (els.viewFiles) els.viewFiles.classList.toggle("is-active", activeView === "files");
+    if (els.viewAiLogs) els.viewAiLogs.classList.toggle("is-active", activeView === "aiLogs");
 
     if (activeView === "files") {
       refreshFiles().catch((err) => Auth.toast(String(err?.message || err || "Не удалось загрузить файлы"), "error"));
+    }
+    if (activeView === "aiLogs") {
+      refreshAiLogs().catch((err) => Auth.toast(String(err?.message || err || "Не удалось загрузить AI-логи"), "error"));
     }
   }
 
@@ -241,6 +309,7 @@
 
       if (els.tabUsers) els.tabUsers.addEventListener("click", () => setView("users"));
       if (els.tabFiles) els.tabFiles.addEventListener("click", () => setView("files"));
+      if (els.tabAiLogs) els.tabAiLogs.addEventListener("click", () => setView("aiLogs"));
 
       await refreshUsers();
       setView(activeView);

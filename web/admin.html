@@ -37,6 +37,7 @@
         <div class="tabs" role="tablist" aria-label="Разделы админки">
           <button id="tabUsers" class="tab is-active" type="button" data-view="users">Пользователи</button>
           <button id="tabFiles" class="tab" type="button" data-view="files">Файлы</button>
+          <button id="tabAiLogs" class="tab" type="button" data-view="aiLogs">AI-логи</button>
         </div>
 
         <div id="viewUsers" class="toolview is-active">
@@ -75,6 +76,27 @@
                 </tr>
               </thead>
               <tbody id="filesTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="viewAiLogs" class="toolview">
+          <div class="panel__header">
+            <h3 class="panel__title">AI-логи</h3>
+            <div class="panel__hint" id="aiLogsMeta">—</div>
+          </div>
+          <div class="tablewrap">
+            <table class="table" aria-label="Таблица AI-логов">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Операция</th>
+                  <th>Запрос</th>
+                  <th>Результат</th>
+                  <th>Токены</th>
+                </tr>
+              </thead>
+              <tbody id="aiLogsTbody"></tbody>
             </table>
           </div>
         </div>

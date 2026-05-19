@@ -1,0 +1,95 @@
+// Use DBML to define your database structure
+// Docs: https://dbml.dbdiagram.io/docs
+
+Table users {
+  id integer [primary key]
+  username varchar(80) [not null, unique, note: 'Логин пользователя, в проекте обычно совпадает с e-mail']
+  email varchar(255) [note: 'Электронная почта пользователя']
+  password_hash varchar(500) [not null, note: 'Хеш пароля']
+  role varchar(20) [not null, note: 'Роль пользователя: user, moderator, admin']
+  created_at timestamp [not null, note: 'Дата и время регистрации']
+}
+
+Table documents {
+  id integer [primary key]
+  filename varchar(255) [not null, note: 'Исходное имя загруженного файла']
+  file_type varchar(10) [not null, note: 'Тип файла: .pdf или .docx']
+  stored_path varchar(500) [not null, note: 'Путь хранения файла в системе']
+  title varchar(255) [note: 'Название документа']
+  author varchar(255) [note: 'Автор документа']
+  publisher varchar(255) [note: 'Издательство']
+  publication_year integer [note: 'Год публикации']
+  doc_type varchar(80) [note: 'Вид или категория документа']
+  bibliography text [note: 'Библиографическое описание']
+  ai_summary text [note: 'Краткая AI-аннотация документа']
+  ai_status varchar(20) [not null, note: 'Состояние AI-обработки: pending, processing, ready, error']
+  full_text text [note: 'Полный нормализованный текст документа']
+  status varchar(20) [not null, note: 'Состояние обработки: uploaded, parsed, error']
+  error_message text [note: 'Сообщение об ошибке при обработке']
+  created_at timestamp [not null, note: 'Дата и время загрузки документа']
+}
+
+Table paragraphs {
+  id integer [primary key]
+  document_id integer [not null]
+  paragraph_index integer [not null, note: 'Порядковый номер абзаца в документе']
+  text text [not null, note: 'Текст абзаца']
+}
+
+Table sentences {
+  id integer [primary key]
+  document_id integer [not null]
+  paragraph_id integer [not null]
+  sentence_index integer [not null, note: 'Порядковый номер предложения в абзаце']
+  text text [not null, note: 'Текст предложения']
+}
+
+Table words {
+  id integer [primary key]
+  document_id integer [not null]
+  sentence_id integer [not null]
+  word_index integer [not null, note: 'Порядковый номер слова в документе']
+  word varchar(255) [not null, note: 'Слово или текстовый токен']
+}
+
+Table document_chunks {
+  id integer [primary key]
+  document_id integer [not null]
+  chunk_index integer [not null, note: 'Порядковый номер фрагмента документа']
+  chunk_text text [not null, note: 'Текстовый фрагмент для семантического поиска']
+  embedding text [note: 'JSON-массив embedding-вектора']
+  embedding_model varchar(100) [note: 'Модель, которой был создан embedding']
+  created_at timestamp [not null, note: 'Дата и время создания фрагмента']
+}
+
+Table ai_request_logs {
+  id integer [primary key]
+  user_id integer
+  document_id integer
+  operation varchar(80) [not null, note: 'Тип AI-операции: embedding_chunk или semantic_search']
+  model varchar(100) [note: 'Модель embeddings']
+  request_text text [note: 'Текст, отправленный в AI API']
+  response_text text [note: 'Краткий результат: размер вектора или найденные chunk/score']
+  status varchar(20) [not null, note: 'success или error']
+  error_message text [note: 'Ошибка AI API или обработки']
+  prompt_tokens integer [note: 'Input tokens по данным API']
+  total_tokens integer [note: 'Total tokens по данным API']
+  duration_ms integer [note: 'Время запроса к API в миллисекундах']
+  created_at timestamp [not null, note: 'Дата и время AI-запроса']
+}
+
+Ref document_paragraphs: paragraphs.document_id > documents.id
+
+Ref document_sentences: sentences.document_id > documents.id
+
+Ref paragraph_sentences: sentences.paragraph_id > paragraphs.id
+
+Ref document_words: words.document_id > documents.id
+
+Ref sentence_words: words.sentence_id > sentences.id
+
+Ref document_chunks_ref: document_chunks.document_id > documents.id
+
+Ref ai_logs_user_ref: ai_request_logs.user_id > users.id
+
+Ref ai_logs_document_ref: ai_request_logs.document_id > documents.id

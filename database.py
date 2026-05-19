@@ -61,6 +61,11 @@ class Document(Base):
         Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
         nullable=True,
     )
+    ai_summary: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
+    ai_status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     # full_text can be very large; use MEDIUMTEXT on MySQL to avoid "Data too long" errors
     full_text: Mapped[str | None] = mapped_column(
         Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
@@ -87,6 +92,11 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="Word.word_index",
+    )
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentChunk.chunk_index",
     )
 
 
@@ -137,6 +147,53 @@ class Word(Base):
     sentence: Mapped["Sentence"] = relationship(back_populates="words")
 
 
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), nullable=False, index=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_text: Mapped[str] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=False,
+    )
+    embedding: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    document: Mapped["Document"] = relationship(back_populates="chunks")
+
+
+class AiRequestLog(Base):
+    __tablename__ = "ai_request_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    document_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"), nullable=True, index=True)
+    operation: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    request_text: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
+    response_text: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    error_message: Mapped[str | None] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=True,
+    )
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_document_columns()
@@ -153,7 +210,16 @@ def _ensure_document_columns() -> None:
         return
 
     missing = []
-    for name in ("title", "author", "publisher", "publication_year", "doc_type", "bibliography"):
+    for name in (
+        "title",
+        "author",
+        "publisher",
+        "publication_year",
+        "doc_type",
+        "bibliography",
+        "ai_summary",
+        "ai_status",
+    ):
         if name not in cols:
             missing.append(name)
 
@@ -167,6 +233,8 @@ def _ensure_document_columns() -> None:
         "publication_year": "ALTER TABLE documents ADD COLUMN publication_year INTEGER NULL",
         "doc_type": "ALTER TABLE documents ADD COLUMN doc_type VARCHAR(80) NULL",
         "bibliography": "ALTER TABLE documents ADD COLUMN bibliography TEXT NULL",
+        "ai_summary": "ALTER TABLE documents ADD COLUMN ai_summary TEXT NULL",
+        "ai_status": "ALTER TABLE documents ADD COLUMN ai_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
     }
 
     with engine.begin() as conn:

@@ -1,21 +1,7 @@
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from database import Document, Paragraph, Sentence, Word
-
-
-def _result_row(
-    document_id: int,
-    text: str,
-    paragraph_index: int | None,
-    sentence_index: int | None,
-) -> dict[str, int | str | None]:
-    return {
-        "document_id": document_id,
-        "text": text,
-        "paragraph_index": paragraph_index,
-        "sentence_index": sentence_index,
-    }
+from services.search import ParagraphSearchService, PhraseSearchService, SentenceSearchService, WordSearchService
+from services.vector_search_service import VectorSearchService
 
 
 def search_word(
@@ -25,34 +11,7 @@ def search_word(
     mode: str | None = None,
     document_id: int | None = None,
 ) -> list[dict[str, int | str | None]]:
-    normalized = query.strip()
-    if not normalized:
-        return []
-
-    normalized_lower = normalized.lower()
-    if mode is None:
-        mode = "exact" if exact else "partial"
-
-    if mode == "exact":
-        condition = func.lower(Word.word) == normalized_lower
-    else:
-        condition = func.lower(Word.word).like(f"%{normalized_lower}%")
-
-    statement = (
-        select(Document.id, Word.word, Paragraph.paragraph_index, Sentence.sentence_index)
-        .join(Word, Word.document_id == Document.id)
-        .join(Sentence, Sentence.id == Word.sentence_id)
-        .join(Paragraph, Paragraph.id == Sentence.paragraph_id)
-        .where(condition)
-        .order_by(Document.filename, Paragraph.paragraph_index, Sentence.sentence_index, Word.word_index)
-    )
-    if document_id is not None:
-        statement = statement.where(Document.id == document_id)
-    rows = db.execute(statement).all()
-    return [
-        _result_row(document_id, word, paragraph_index, sentence_index)
-        for document_id, word, paragraph_index, sentence_index in rows
-    ]
+    return WordSearchService(db).search(query=query, exact=exact, mode=mode, document_id=document_id)
 
 
 def search_sentence(
@@ -60,24 +19,7 @@ def search_sentence(
     query: str,
     document_id: int | None = None,
 ) -> list[dict[str, int | str | None]]:
-    normalized = query.strip()
-    if not normalized:
-        return []
-
-    statement = (
-        select(Document.id, Sentence.text, Paragraph.paragraph_index, Sentence.sentence_index)
-        .join(Sentence, Sentence.document_id == Document.id)
-        .join(Paragraph, Paragraph.id == Sentence.paragraph_id)
-        .where(Sentence.text.ilike(f"%{normalized}%"))
-        .order_by(Document.filename, Paragraph.paragraph_index, Sentence.sentence_index)
-    )
-    if document_id is not None:
-        statement = statement.where(Document.id == document_id)
-    rows = db.execute(statement).all()
-    return [
-        _result_row(document_id, text, paragraph_index, sentence_index)
-        for document_id, text, paragraph_index, sentence_index in rows
-    ]
+    return SentenceSearchService(db).search(query=query, document_id=document_id)
 
 
 def search_paragraph(
@@ -85,23 +27,7 @@ def search_paragraph(
     query: str,
     document_id: int | None = None,
 ) -> list[dict[str, int | str | None]]:
-    normalized = query.strip()
-    if not normalized:
-        return []
-
-    statement = (
-        select(Document.id, Paragraph.text, Paragraph.paragraph_index)
-        .join(Paragraph, Paragraph.document_id == Document.id)
-        .where(Paragraph.text.ilike(f"%{normalized}%"))
-        .order_by(Document.filename, Paragraph.paragraph_index)
-    )
-    if document_id is not None:
-        statement = statement.where(Document.id == document_id)
-    rows = db.execute(statement).all()
-    return [
-        _result_row(document_id, text, paragraph_index, None)
-        for document_id, text, paragraph_index in rows
-    ]
+    return ParagraphSearchService(db).search(query=query, document_id=document_id)
 
 
 def search_phrase(
@@ -109,16 +35,13 @@ def search_phrase(
     query: str,
     document_id: int | None = None,
 ) -> list[dict[str, int | str | None]]:
-    normalized = query.strip()
-    if not normalized:
-        return []
+    return PhraseSearchService(db).search(query=query, document_id=document_id)
 
-    results: list[dict[str, int | str | None]] = []
 
-    for item in search_sentence(db, normalized, document_id=document_id):
-        results.append(item)
-
-    for item in search_paragraph(db, normalized, document_id=document_id):
-        results.append(item)
-
-    return results
+def search_semantic(
+    db: Session,
+    query: str,
+    document_id: int | None = None,
+    limit: int = 10,
+) -> list[dict[str, int | float | str | None]]:
+    return VectorSearchService(db).search(query=query, document_id=document_id, limit=limit)

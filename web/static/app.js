@@ -362,9 +362,14 @@ function renderStats(doc) {
   const wordsCount = Array.isArray(doc.words) ? doc.words.length : 0;
 
   const status = normalizeStatus(doc.status);
+  const aiStatus = String(doc.ai_status || "");
+  const aiStatusLabel = { pending: "AI интизор", processing: "AI коркард", ready: "AI тайёр", error: "AI хато" }[aiStatus] || aiStatus;
   const error = doc.error_message ? `<span class="stats__error">${escapeHtml(doc.error_message)}</span>` : "";
   const statusRow =
     status === "Тайёр" ? "" : `<div class="stat"><div class="stat__k">Ҳолат</div><div class="stat__v">${escapeHtml(status)}</div></div>`;
+  const aiStatusRow = aiStatus
+    ? `<div class="stat"><div class="stat__k">AI</div><div class="stat__v">${escapeHtml(aiStatusLabel)}</div></div>`
+    : "";
 
   const author = doc.author ? `<div class="stat"><div class="stat__k">Муаллиф</div><div class="stat__v">${escapeHtml(doc.author)}</div></div>` : "";
   const publisher = doc.publisher
@@ -374,15 +379,20 @@ function renderStats(doc) {
     doc.publication_year != null
       ? `<div class="stat"><div class="stat__k">Сол</div><div class="stat__v">${escapeHtml(doc.publication_year)}</div></div>`
       : "";
+  const aiSummary = doc.ai_summary
+    ? `<div class="stat stat--wide"><div class="stat__k">AI-аннотация</div><div class="stat__v">${escapeHtml(doc.ai_summary)}</div></div>`
+    : "";
 
   els.docStats.innerHTML = `
     ${statusRow}
+    ${aiStatusRow}
     <div class="stat"><div class="stat__k">Абзатсҳо</div><div class="stat__v">${paragraphsCount}</div></div>
     <div class="stat"><div class="stat__k">Ҷумлаҳо</div><div class="stat__v">${sentencesCount}</div></div>
     <div class="stat"><div class="stat__k">Калимаҳо</div><div class="stat__v">${wordsCount}</div></div>
     ${author}
     ${publisher}
     ${year}
+    ${aiSummary}
     ${doc.bibliography ? `<div class="stat stat--wide"><div class="stat__k">Библиография</div><div class="stat__v">${escapeHtml(doc.bibliography)}</div></div>` : ""}
     ${error ? `<div class="stat stat--wide">${error}</div>` : ""}
   `;
@@ -651,6 +661,8 @@ function renderResults(data, query) {
 
   if (target === "word") {
     els.resultsMeta.textContent = `«${query}» — ${total} маротиба${docsHint}`;
+  } else if (target === "semantic") {
+    els.resultsMeta.textContent = `Семантикӣ: ${total}${docsHint}`;
   } else {
     els.resultsMeta.textContent = `Ёфт шуд: ${total}${docsHint}`;
   }
@@ -669,7 +681,12 @@ function renderResults(data, query) {
     const docName = docCitation(doc) || `Файл #${r.document_id}`;
     const p = r.paragraph_index != null ? `Абзатс ${r.paragraph_index}` : null;
     const s = r.sentence_index != null ? `Ҷумла ${r.sentence_index}` : null;
+    const c = target === "semantic" && r.chunk_index != null ? `Chunk ${r.chunk_index}` : null;
+    const score = target === "semantic" && r.score != null ? `Score ${Number(r.score).toFixed(4)}` : null;
     const where = [p, s].filter(Boolean).join(" • ") || "—";
+    const semanticWhere = [c, score].filter(Boolean).join(" • ");
+    const finalWhere = target === "semantic" ? semanticWhere || where : where;
+    const resultText = target === "semantic" ? String(r.chunk_text || "") : String(r.text || "");
 
     const card = document.createElement("button");
     card.type = "button";
@@ -677,9 +694,9 @@ function renderResults(data, query) {
     card.innerHTML = `
       <div class="result__top">
         <div class="result__doc">${escapeHtml(docName)}</div>
-        <div class="result__where">${escapeHtml(where)}</div>
+        <div class="result__where">${escapeHtml(finalWhere)}</div>
       </div>
-      <div class="result__text">${highlight(String(r.text || ""), query)}</div>
+      <div class="result__text">${target === "semantic" ? escapeHtml(resultText) : highlight(resultText, query)}</div>
     `;
     card.addEventListener("click", () =>
       selectDoc(r.document_id, {
