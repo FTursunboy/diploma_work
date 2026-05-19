@@ -3,6 +3,10 @@ from pathlib import Path
 from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 
+from config import load_environment
+
+load_environment()
+
 from database import init_db
 from routers.auth import router as auth_router
 from routers.documents import router as documents_router
@@ -31,4 +35,3 @@ app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(search_router)
 app.include_router(tools_router)
-
