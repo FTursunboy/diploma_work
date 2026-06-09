@@ -4,7 +4,16 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from database import AiRequestLog, Document, DocumentChunk
+from database import (
+    AiRequestLog,
+    Document,
+    DocumentChunk,
+    DocumentNgram,
+    Paragraph,
+    ParagraphEmbeddingBlock,
+    Sentence,
+    Word,
+)
 
 
 class DocumentService:
@@ -127,11 +136,17 @@ class DocumentService:
         document = self._db.get(Document, document_id)
         if document is None:
             raise HTTPException(status_code=404, detail="Файл ёфт нашуд.")
-        if document.status == "processing" or document.ai_status == "processing":
-            raise HTTPException(status_code=409, detail="Файл ҳоло коркард шуда истодааст.")
 
         stored_path = document.stored_path
-        self._db.query(AiRequestLog).filter(AiRequestLog.document_id == document_id).delete()
-        self._db.delete(document)
+        self._db.query(AiRequestLog).filter(AiRequestLog.document_id == document_id).delete(synchronize_session=False)
+        self._db.query(Word).filter(Word.document_id == document_id).delete(synchronize_session=False)
+        self._db.query(DocumentNgram).filter(DocumentNgram.document_id == document_id).delete(synchronize_session=False)
+        self._db.query(DocumentChunk).filter(DocumentChunk.document_id == document_id).delete(synchronize_session=False)
+        self._db.query(ParagraphEmbeddingBlock).filter(
+            ParagraphEmbeddingBlock.document_id == document_id
+        ).delete(synchronize_session=False)
+        self._db.query(Sentence).filter(Sentence.document_id == document_id).delete(synchronize_session=False)
+        self._db.query(Paragraph).filter(Paragraph.document_id == document_id).delete(synchronize_session=False)
+        self._db.query(Document).filter(Document.id == document_id).delete(synchronize_session=False)
         self._db.commit()
         return stored_path
