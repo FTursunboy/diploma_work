@@ -262,6 +262,27 @@ class DocumentParserService:
             self._db.commit()
             return {"paragraphs": 0, "sentences": 0, "words": 0, "chunks": 0}
 
+    def run_full_processing_for_document(self, *, document_id: int) -> None:
+        if self._db is None:
+            raise RuntimeError("Database session is required for run_full_processing_for_document().")
+
+        document = self._db.get(Document, document_id)
+        if document is None or document.status == "parsed":
+            return
+
+        document.status = "processing"
+        document.ai_status = "pending"
+        document.error_message = None
+        self._db.add(document)
+        self._db.commit()
+
+        self.parse_document(document)
+        self._db.refresh(document)
+        if document.status != "parsed":
+            return
+
+        self.run_ai_processing_for_document(document_id=document.id)
+
     def run_ai_processing_for_document(self, *, document_id: int) -> None:
         if self._db is None:
             raise RuntimeError("Database session is required for run_ai_processing_for_document().")
@@ -544,9 +565,26 @@ class DocumentParserService:
             doc_type=doc_type,
             bibliography=bibliography,
         )
-        counts = self.parse_document(document)
-        self._db.refresh(document)
+        counts = {"paragraphs": 0, "sentences": 0, "words": 0, "chunks": 0}
         return document, counts
+
+
+def run_document_processing_job(document_id: int) -> None:
+    db = SessionLocal()
+    try:
+        DocumentParserService(db).run_full_processing_for_document(document_id=document_id)
+    finally:
+        db.close()
+
+
+def start_document_processing_job(document_id: int) -> None:
+    thread = threading.Thread(
+        target=run_document_processing_job,
+        args=(document_id,),
+        name=f"document-processing-{document_id}",
+        daemon=True,
+    )
+    thread.start()
 
 
 def run_ai_processing_job(document_id: int) -> None:
@@ -565,3 +603,24 @@ def start_ai_processing_job(document_id: int) -> None:
         daemon=True,
     )
     thread.start()
+
+
+def resume_pending_document_jobs() -> None:
+    db = SessionLocal()
+    try:
+        parse_document_ids = db.scalars(
+            select(Document.id).where(Document.status.in_(("uploaded", "processing")))
+        ).all()
+        ai_document_ids = db.scalars(
+            select(Document.id).where(
+                Document.status == "parsed",
+                Document.ai_status.in_(("pending", "processing")),
+            )
+        ).all()
+    finally:
+        db.close()
+
+    for document_id in parse_document_ids:
+        start_document_processing_job(int(document_id))
+    for document_id in ai_document_ids:
+        start_ai_processing_job(int(document_id))

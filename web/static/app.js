@@ -9,6 +9,7 @@ const state = {
   activeTab: "text",
   focus: null, // { documentId, paragraphIndex, sentenceIndex, query }
   wordFreqByDocId: new Map(),
+  docsPollTimer: null,
   renderLimits: {
     paragraphs: 50,
     sentences: 50,
@@ -137,6 +138,9 @@ function getStatusView(doc) {
   if (status === "error" || aiStatus === "error") {
     return { code: "error", label: "Хато" };
   }
+  if (status === "processing") {
+    return { code: "processing", label: "Коркард шуда истодааст" };
+  }
   if (status === "parsed" && aiStatus && aiStatus !== "ready") {
     return { code: "processing", label: "Омода шуда истодааст" };
   }
@@ -147,6 +151,26 @@ function getStatusView(doc) {
     return { code: "uploaded", label: "Боргузорӣ шуд" };
   }
   return { code: status || "default", label: status || "—" };
+}
+
+function isDocumentJobActive(doc) {
+  const status = String(doc?.status || "");
+  const aiStatus = String(doc?.ai_status || "");
+  if (status === "uploaded" || status === "processing") return true;
+  return status === "parsed" && ["pending", "processing"].includes(aiStatus);
+}
+
+function updateDocsPolling() {
+  const hasActiveJobs = state.docs.some(isDocumentJobActive);
+  if (hasActiveJobs && !state.docsPollTimer) {
+    state.docsPollTimer = window.setInterval(() => {
+      refreshDocs({ keepSelection: true, refreshSelectedDetail: true, silent: true });
+    }, 5000);
+  }
+  if (!hasActiveJobs && state.docsPollTimer) {
+    window.clearInterval(state.docsPollTimer);
+    state.docsPollTimer = null;
+  }
 }
 
 function docTitleOrFallback(doc) {
@@ -242,7 +266,7 @@ function renderDocSelect(selectEl) {
   }
 }
 
-async function refreshDocs({ keepSelection = true } = {}) {
+async function refreshDocs({ keepSelection = true, refreshSelectedDetail = false, silent = false } = {}) {
   try {
     const docs = await fetchJson("/documents");
     state.docs = Array.isArray(docs) ? docs : [];
@@ -263,10 +287,19 @@ async function refreshDocs({ keepSelection = true } = {}) {
       state.selectedDoc = null;
     }
 
+    if (refreshSelectedDetail && state.selectedDocId && state.docsById.has(state.selectedDocId)) {
+      try {
+        state.selectedDoc = await fetchJson(`/documents/${state.selectedDocId}`);
+      } catch (err) {
+        // Keep the previous detail view during transient polling failures.
+      }
+    }
+
     renderDocs();
     renderSelectedDoc();
+    updateDocsPolling();
   } catch (err) {
-    toast(`Рӯйхати Китобхоро бор карда нашуд: ${String(err.message || err)}`, "error");
+    if (!silent) toast(`Рӯйхати Китобхоро бор карда нашуд: ${String(err.message || err)}`, "error");
   }
 }
 
@@ -328,7 +361,7 @@ async function onUploadModalSubmit(e) {
   setBusy(els.uploadBtn, true, "Боргузорӣ…");
   try {
     const doc = await uploadDocument(form);
-    toast("Файл боргузорӣ ва коркард шуд.", "success");
+    toast("Файл боргузорӣ шуд. Коркард дар фон оғоз шуд.", "success");
     await refreshDocs({ keepSelection: true });
     if (doc?.id) await selectDoc(doc.id);
     if (els.uploadModalForm) els.uploadModalForm.reset();
@@ -568,10 +601,15 @@ function renderSelectedDoc() {
   renderStats(doc);
 
   let html = "";
-  if (state.activeTab === "text") html = renderDocText(doc);
-  if (state.activeTab === "paragraphs") html = renderParagraphs(doc);
-  if (state.activeTab === "sentences") html = renderSentences(doc);
-  if (state.activeTab === "words") html = renderWords(doc);
+  const status = String(doc.status || "");
+  if (status === "uploaded" || status === "processing") {
+    html = `<div class="placeholder">Файл коркард шуда истодааст. Ин раванд дар фон идома дорад.</div>`;
+  } else {
+    if (state.activeTab === "text") html = renderDocText(doc);
+    if (state.activeTab === "paragraphs") html = renderParagraphs(doc);
+    if (state.activeTab === "sentences") html = renderSentences(doc);
+    if (state.activeTab === "words") html = renderWords(doc);
+  }
 
   els.docBody.innerHTML = html;
   renderDocSummary(doc);

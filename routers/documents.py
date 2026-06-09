@@ -7,7 +7,7 @@ from starlette.responses import FileResponse
 from database import get_db
 from routers.dependencies import get_current_user, require_admin, require_moderator
 from routers.schemas import FilePathRequest
-from services.document_parser_service import DocumentParserService, start_ai_processing_job
+from services.document_parser_service import DocumentParserService, start_document_processing_job
 from services.document_service import DocumentService
 
 
@@ -46,10 +46,12 @@ def upload_document(
         doc_type=(doc_type or "").strip() or None,
         bibliography=(bibliography or "").strip() or None,
     )
-    counts = parser.parse_document(document)
+    document.status = "processing"
+    document.ai_status = "pending"
+    db.add(document)
+    db.commit()
     db.refresh(document)
-    if document.status == "parsed":
-        start_ai_processing_job(document.id)
+    start_document_processing_job(document.id)
 
     return {
         "id": document.id,
@@ -66,10 +68,10 @@ def upload_document(
         "status": document.status,
         "full_text": document.full_text,
         "error_message": document.error_message,
-        "paragraphs_count": counts["paragraphs"],
-        "sentences_count": counts["sentences"],
-        "words_count": counts["words"],
-        "chunks_count": counts.get("chunks", 0),
+        "paragraphs_count": 0,
+        "sentences_count": 0,
+        "words_count": 0,
+        "chunks_count": 0,
     }
 
 
@@ -92,8 +94,12 @@ def upload_document_from_path(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if document.status == "parsed":
-        start_ai_processing_job(document.id)
+    document.status = "processing"
+    document.ai_status = "pending"
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    start_document_processing_job(document.id)
     return {
         "id": document.id,
         "filename": document.filename,
