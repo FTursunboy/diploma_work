@@ -1,6 +1,7 @@
 from collections import Counter
 import hashlib
 import json
+import logging
 import shutil
 import subprocess
 import threading
@@ -33,6 +34,9 @@ from splitter import normalize_text, split_paragraphs, split_sentences, split_wo
 SUPPORTED_EXTENSIONS = {".pdf", ".doc", ".docx"}
 NGRAM_MIN_N = 2
 NGRAM_MAX_N = 5
+WORD_INSERT_BATCH_SIZE = 5000
+NGRAM_INSERT_BATCH_SIZE = 2000
+logger = logging.getLogger(__name__)
 
 
 def _ngram_hash(ngram: str) -> str:
@@ -178,9 +182,11 @@ class DocumentParserService:
         if self._db is None:
             raise RuntimeError("Database session is required for parse_document().")
         try:
+            logger.info("document_parse_start document_id=%s filename=%s", document.id, document.filename)
             structured_text = self.extract_text(Path(document.stored_path), document.file_type)
             if not structured_text:
                 raise ValueError("Аз файл матн бароварда нашуд.")
+            logger.info("document_text_extracted document_id=%s chars=%s", document.id, len(structured_text))
 
             document.full_text = " ".join(structured_text.split())
             document.status = "parsed"
@@ -198,6 +204,13 @@ class DocumentParserService:
             sentence_counter = 0
             word_counter = 0
             ngram_counts: Counter[tuple[int, str]] = Counter()
+            word_rows: list[dict[str, int | str]] = []
+
+            def flush_words() -> None:
+                if not word_rows:
+                    return
+                self._db.bulk_insert_mappings(Word, word_rows)
+                word_rows.clear()
 
             for paragraph_index, paragraph_text in enumerate(paragraphs, start=1):
                 paragraph = Paragraph(
@@ -226,27 +239,55 @@ class DocumentParserService:
 
                     for word_text in sentence_words:
                         word_counter += 1
-                        self._db.add(
-                            Word(
-                                document_id=document.id,
-                                sentence_id=sentence.id,
-                                word_index=word_counter,
-                                word=word_text,
-                            )
+                        word_rows.append(
+                            {
+                                "document_id": int(document.id),
+                                "sentence_id": int(sentence.id),
+                                "word_index": word_counter,
+                                "word": word_text,
+                            }
                         )
+                        if len(word_rows) >= WORD_INSERT_BATCH_SIZE:
+                            flush_words()
 
-            for (n, ngram), count in ngram_counts.items():
-                self._db.add(
-                    DocumentNgram(
-                        document_id=document.id,
-                        n=n,
-                        ngram=ngram,
-                        ngram_hash=_ngram_hash(ngram),
-                        count=int(count),
+                if paragraph_index % 100 == 0:
+                    logger.info(
+                        "document_parse_progress document_id=%s paragraphs=%s/%s sentences=%s words=%s",
+                        document.id,
+                        paragraph_index,
+                        len(paragraphs),
+                        sentence_counter,
+                        word_counter,
                     )
+
+            flush_words()
+
+            ngram_rows: list[dict[str, int | str]] = []
+            for (n, ngram), count in ngram_counts.items():
+                ngram_rows.append(
+                    {
+                        "document_id": int(document.id),
+                        "n": n,
+                        "ngram": ngram,
+                        "ngram_hash": _ngram_hash(ngram),
+                        "count": int(count),
+                    }
                 )
+                if len(ngram_rows) >= NGRAM_INSERT_BATCH_SIZE:
+                    self._db.bulk_insert_mappings(DocumentNgram, ngram_rows)
+                    ngram_rows.clear()
+            if ngram_rows:
+                self._db.bulk_insert_mappings(DocumentNgram, ngram_rows)
 
             self._db.commit()
+            logger.info(
+                "document_parse_done document_id=%s paragraphs=%s sentences=%s words=%s ngrams=%s",
+                document.id,
+                len(paragraphs),
+                sentence_counter,
+                word_counter,
+                len(ngram_counts),
+            )
 
             return {
                 "paragraphs": len(paragraphs),
@@ -256,6 +297,7 @@ class DocumentParserService:
             }
         except Exception as exc:
             self._db.rollback()
+            logger.exception("document_parse_error document_id=%s", getattr(document, "id", None))
             document.status = "error"
             document.error_message = str(exc)
             self._db.add(document)
@@ -310,9 +352,9 @@ class DocumentParserService:
         self._db.commit()
 
         try:
-            structured_text = self.extract_text(Path(document.stored_path), document.file_type)
+            structured_text = document.full_text or ""
             if not structured_text:
-                structured_text = document.full_text or ""
+                structured_text = self.extract_text(Path(document.stored_path), document.file_type)
             self.index_document_paragraphs(document=document)
             self.index_document_chunks(document=document, structured_text=structured_text)
             SummaryService(self._db).generate_for_document(document=document, text=structured_text)
@@ -573,6 +615,18 @@ def run_document_processing_job(document_id: int) -> None:
     db = SessionLocal()
     try:
         DocumentParserService(db).run_full_processing_for_document(document_id=document_id)
+    except Exception as exc:
+        logger.exception("document_processing_job_error document_id=%s", document_id)
+        try:
+            db.rollback()
+            document = db.get(Document, document_id)
+            if document is not None:
+                document.status = "error"
+                document.error_message = str(exc)
+                db.add(document)
+                db.commit()
+        except Exception:
+            logger.exception("document_processing_error_save_failed document_id=%s", document_id)
     finally:
         db.close()
 
@@ -591,6 +645,18 @@ def run_ai_processing_job(document_id: int) -> None:
     db = SessionLocal()
     try:
         DocumentParserService(db).run_ai_processing_for_document(document_id=document_id)
+    except Exception as exc:
+        logger.exception("ai_processing_job_error document_id=%s", document_id)
+        try:
+            db.rollback()
+            document = db.get(Document, document_id)
+            if document is not None:
+                document.ai_status = "error"
+                document.error_message = str(exc)
+                db.add(document)
+                db.commit()
+        except Exception:
+            logger.exception("ai_processing_error_save_failed document_id=%s", document_id)
     finally:
         db.close()
 

@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from database import Document, DocumentChunk
+from database import AiRequestLog, Document, DocumentChunk
 
 
 class DocumentService:
@@ -127,8 +127,11 @@ class DocumentService:
         document = self._db.get(Document, document_id)
         if document is None:
             raise HTTPException(status_code=404, detail="Файл ёфт нашуд.")
+        if document.status == "processing" or document.ai_status == "processing":
+            raise HTTPException(status_code=409, detail="Файл ҳоло коркард шуда истодааст.")
 
         stored_path = document.stored_path
+        self._db.query(AiRequestLog).filter(AiRequestLog.document_id == document_id).delete()
         self._db.delete(document)
         self._db.commit()
         return stored_path
