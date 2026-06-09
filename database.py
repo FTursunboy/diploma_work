@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 import os
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, create_engine, func, inspect, select, text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, create_engine, func, inspect, select, text
 from sqlalchemy.dialects import mysql as mysql_dialect
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
@@ -98,6 +98,11 @@ class Document(Base):
         cascade="all, delete-orphan",
         order_by="Word.word_index",
     )
+    ngrams: Mapped[list["DocumentNgram"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by=lambda: (DocumentNgram.n, DocumentNgram.ngram),
+    )
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan",
@@ -160,6 +165,26 @@ class Word(Base):
 
     document: Mapped["Document"] = relationship(back_populates="words")
     sentence: Mapped["Sentence"] = relationship(back_populates="words")
+
+
+class DocumentNgram(Base):
+    __tablename__ = "document_ngrams"
+    __table_args__ = (
+        Index("ix_document_ngrams_doc_n", "document_id", "n"),
+        Index("ix_document_ngrams_n_hash", "n", "ngram_hash"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), nullable=False, index=True)
+    n: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    ngram: Mapped[str] = mapped_column(
+        Text().with_variant(mysql_dialect.MEDIUMTEXT(), "mysql"),
+        nullable=False,
+    )
+    ngram_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    document: Mapped["Document"] = relationship(back_populates="ngrams")
 
 
 class DocumentChunk(Base):

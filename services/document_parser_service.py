@@ -1,6 +1,8 @@
+from collections import Counter
+import hashlib
 import json
-import subprocess
 import shutil
+import subprocess
 import threading
 from pathlib import Path
 from uuid import uuid4
@@ -10,7 +12,17 @@ from pypdf import PdfReader
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from database import Document, DocumentChunk, Paragraph, ParagraphEmbeddingBlock, Sentence, SessionLocal, UPLOAD_DIR, Word
+from database import (
+    Document,
+    DocumentChunk,
+    DocumentNgram,
+    Paragraph,
+    ParagraphEmbeddingBlock,
+    Sentence,
+    SessionLocal,
+    UPLOAD_DIR,
+    Word,
+)
 from services.ai_log_service import AiLogService
 from services.chunk_service import split_text_chunks
 from services.embedding_service import EmbeddingService
@@ -19,6 +31,21 @@ from splitter import normalize_text, split_paragraphs, split_sentences, split_wo
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".doc", ".docx"}
+NGRAM_MIN_N = 2
+NGRAM_MAX_N = 5
+
+
+def _ngram_hash(ngram: str) -> str:
+    return hashlib.sha256(ngram.encode("utf-8")).hexdigest()
+
+
+def _add_sentence_ngrams(tokens: list[str], counts: Counter[tuple[int, str]]) -> None:
+    for n in range(NGRAM_MIN_N, NGRAM_MAX_N + 1):
+        if len(tokens) < n:
+            continue
+        for index in range(0, len(tokens) - n + 1):
+            ngram = " ".join(tokens[index : index + n])
+            counts[(n, ngram)] += 1
 
 
 class DocumentParserService:
@@ -164,11 +191,13 @@ class DocumentParserService:
             self._db.query(Word).filter(Word.document_id == document.id).delete()
             self._db.query(Sentence).filter(Sentence.document_id == document.id).delete()
             self._db.query(Paragraph).filter(Paragraph.document_id == document.id).delete()
+            self._db.query(DocumentNgram).filter(DocumentNgram.document_id == document.id).delete()
             self._db.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).delete()
 
             paragraphs = split_paragraphs(structured_text)
             sentence_counter = 0
             word_counter = 0
+            ngram_counts: Counter[tuple[int, str]] = Counter()
 
             for paragraph_index, paragraph_text in enumerate(paragraphs, start=1):
                 paragraph = Paragraph(
@@ -191,7 +220,11 @@ class DocumentParserService:
                     self._db.add(sentence)
                     self._db.flush()
 
-                    for word_text in split_words(sentence_text):
+                    sentence_words = split_words(sentence_text)
+                    ngram_tokens = [(word or "").strip().lower() for word in sentence_words if (word or "").strip()]
+                    _add_sentence_ngrams(ngram_tokens, ngram_counts)
+
+                    for word_text in sentence_words:
                         word_counter += 1
                         self._db.add(
                             Word(
@@ -201,6 +234,17 @@ class DocumentParserService:
                                 word=word_text,
                             )
                         )
+
+            for (n, ngram), count in ngram_counts.items():
+                self._db.add(
+                    DocumentNgram(
+                        document_id=document.id,
+                        n=n,
+                        ngram=ngram,
+                        ngram_hash=_ngram_hash(ngram),
+                        count=int(count),
+                    )
+                )
 
             self._db.commit()
 

@@ -9,7 +9,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-      - .ENV
     ports:
       - "8000:8000"
     volumes:
@@ -18,6 +17,7 @@ services:
       - ./search.py:/app/search.py
       - ./parser.py:/app/parser.py
       - ./splitter.py:/app/splitter.py
+      - ./config.py:/app/config.py
       - ./database.py:/app/database.py
       - ./auth.py:/app/auth.py
       - ./routers:/app/routers

@@ -64,6 +64,15 @@ Table words {
   word varchar(255) [not null, note: 'Слово или текстовый токен']
 }
 
+Table document_ngrams {
+  id integer [primary key]
+  document_id integer [not null]
+  n integer [not null, note: 'Размер n-граммы: 2, 3, 4 или 5']
+  ngram text [not null, note: 'Нормализованный текст n-граммы']
+  ngram_hash varchar(64) [not null, note: 'SHA-256 хеш n-граммы для быстрого точного поиска']
+  count integer [not null, note: 'Количество повторений n-граммы в документе']
+}
+
 Table document_chunks {
   id integer [primary key]
   document_id integer [not null]
@@ -99,6 +108,8 @@ Ref paragraph_sentences: sentences.paragraph_id > paragraphs.id
 Ref document_words: words.document_id > documents.id
 
 Ref sentence_words: words.sentence_id > sentences.id
+
+Ref document_ngrams_ref: document_ngrams.document_id > documents.id
 
 Ref document_chunks_ref: document_chunks.document_id > documents.id
 
