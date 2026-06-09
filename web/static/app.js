@@ -138,6 +138,9 @@ function getStatusView(doc) {
   if (status === "error" || aiStatus === "error") {
     return { code: "error", label: "Хато" };
   }
+  if (status === "deleting") {
+    return { code: "processing", label: "Нест шуда истодааст" };
+  }
   if (status === "processing") {
     return { code: "processing", label: "Коркард шуда истодааст" };
   }
@@ -156,7 +159,7 @@ function getStatusView(doc) {
 function isDocumentJobActive(doc) {
   const status = String(doc?.status || "");
   const aiStatus = String(doc?.ai_status || "");
-  if (status === "uploaded" || status === "processing") return true;
+  if (status === "uploaded" || status === "processing" || status === "deleting") return true;
   return status === "parsed" && ["pending", "processing"].includes(aiStatus);
 }
 
@@ -1069,7 +1072,7 @@ async function onDelete() {
   setBusy(els.deleteBtn, true, "Несткунӣ…");
   try {
     await fetchJson(`/documents/${doc.id}`, { method: "DELETE" });
-    toast("Файл нест карда шуд.", "success");
+    toast("Несткунӣ дар фон оғоз шуд.", "success");
     state.selectedDocId = null;
     state.selectedDoc = null;
     await refreshDocs({ keepSelection: false });

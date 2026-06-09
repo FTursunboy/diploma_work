@@ -8,7 +8,7 @@ from database import get_db
 from routers.dependencies import get_current_user, require_admin, require_moderator
 from routers.schemas import FilePathRequest
 from services.document_parser_service import DocumentParserService, start_document_processing_job
-from services.document_service import DocumentService
+from services.document_service import DocumentService, start_document_deletion_job
 
 
 router = APIRouter()
@@ -148,10 +148,6 @@ def delete_document(
     db: Session = Depends(get_db),
     _=Depends(require_admin),
 ) -> dict[str, int | str]:
-    stored_path = DocumentService(db).delete_document(document_id=document_id)
-    if stored_path:
-        try:
-            Path(stored_path).unlink(missing_ok=True)
-        except Exception:
-            pass
-    return {"status": "deleted", "id": document_id}
+    DocumentService(db).mark_document_deleting(document_id=document_id)
+    start_document_deletion_job(document_id)
+    return {"status": "deleting", "id": document_id}
