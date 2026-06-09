@@ -19,7 +19,7 @@ class ParagraphSearchService(BaseSearchService):
         statement = (
             select(Document.id, Paragraph.text, Paragraph.paragraph_index)
             .join(Paragraph, Paragraph.document_id == Document.id)
-            .where(Paragraph.text.ilike(f"%{normalized}%"))
+            .where(Document.deleted_at.is_(None), Paragraph.text.ilike(f"%{normalized}%"))
             .order_by(Document.filename, Paragraph.paragraph_index)
         )
         if document_id is not None:
@@ -34,4 +34,3 @@ class ParagraphSearchService(BaseSearchService):
             }
             for document_id_row, text, paragraph_index in rows
         ]
-

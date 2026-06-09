@@ -1072,7 +1072,7 @@ async function onDelete() {
   setBusy(els.deleteBtn, true, "Несткунӣ…");
   try {
     await fetchJson(`/documents/${doc.id}`, { method: "DELETE" });
-    toast("Несткунӣ дар фон оғоз шуд.", "success");
+    toast("Файл нест карда шуд.", "success");
     state.selectedDocId = null;
     state.selectedDoc = null;
     await refreshDocs({ keepSelection: false });

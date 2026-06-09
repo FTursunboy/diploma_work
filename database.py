@@ -82,6 +82,7 @@ class Document(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
 
     paragraphs: Mapped[list["Paragraph"]] = relationship(
         back_populates="document",
@@ -259,6 +260,7 @@ class AiRequestLog(Base):
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_document_columns()
+    _ensure_deleted_document_markers()
     _ensure_paragraph_columns()
     _ensure_paragraph_block_table()
     _ensure_user_columns()
@@ -283,6 +285,7 @@ def _ensure_document_columns() -> None:
         "bibliography",
         "ai_summary",
         "ai_status",
+        "deleted_at",
     ):
         if name not in cols:
             missing.append(name)
@@ -299,6 +302,7 @@ def _ensure_document_columns() -> None:
         "bibliography": "ALTER TABLE documents ADD COLUMN bibliography TEXT NULL",
         "ai_summary": "ALTER TABLE documents ADD COLUMN ai_summary TEXT NULL",
         "ai_status": "ALTER TABLE documents ADD COLUMN ai_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
+        "deleted_at": "ALTER TABLE documents ADD COLUMN deleted_at DATETIME NULL",
     }
 
     with engine.begin() as conn:
@@ -307,6 +311,26 @@ def _ensure_document_columns() -> None:
             if not stmt:
                 continue
             conn.execute(text(stmt))
+
+
+def _ensure_deleted_document_markers() -> None:
+    inspector = inspect(engine)
+    try:
+        cols = {c["name"] for c in inspector.get_columns("documents")}
+    except Exception:
+        return
+
+    if "deleted_at" not in cols or "status" not in cols:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE documents "
+                "SET deleted_at = CURRENT_TIMESTAMP "
+                "WHERE deleted_at IS NULL AND status IN ('deleted', 'deleting')"
+            )
+        )
 
 
 def _ensure_user_columns() -> None:

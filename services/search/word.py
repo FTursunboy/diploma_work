@@ -32,7 +32,7 @@ class WordSearchService(BaseSearchService):
             .join(Word, Word.document_id == Document.id)
             .join(Sentence, Sentence.id == Word.sentence_id)
             .join(Paragraph, Paragraph.id == Sentence.paragraph_id)
-            .where(condition)
+            .where(Document.deleted_at.is_(None), condition)
             .order_by(Document.filename, Paragraph.paragraph_index, Sentence.sentence_index, Word.word_index)
         )
         if document_id is not None:
@@ -47,4 +47,3 @@ class WordSearchService(BaseSearchService):
             }
             for document_id_row, word, paragraph_index, sentence_index in rows
         ]
-

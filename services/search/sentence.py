@@ -20,7 +20,7 @@ class SentenceSearchService(BaseSearchService):
             select(Document.id, Sentence.text, Paragraph.paragraph_index, Sentence.sentence_index)
             .join(Sentence, Sentence.document_id == Document.id)
             .join(Paragraph, Paragraph.id == Sentence.paragraph_id)
-            .where(Sentence.text.ilike(f"%{normalized}%"))
+            .where(Document.deleted_at.is_(None), Sentence.text.ilike(f"%{normalized}%"))
             .order_by(Document.filename, Paragraph.paragraph_index, Sentence.sentence_index)
         )
         if document_id is not None:
@@ -35,4 +35,3 @@ class SentenceSearchService(BaseSearchService):
             }
             for document_id_row, text, paragraph_index, sentence_index in rows
         ]
-

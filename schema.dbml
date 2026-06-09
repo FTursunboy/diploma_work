@@ -27,6 +27,7 @@ Table documents {
   status varchar(20) [not null, note: 'Состояние обработки: uploaded, parsed, error']
   error_message text [note: 'Сообщение об ошибке при обработке']
   created_at timestamp [not null, note: 'Дата и время загрузки документа']
+  deleted_at timestamp [note: 'Дата и время мягкого удаления документа']
 }
 
 Table paragraphs {

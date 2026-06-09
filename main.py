@@ -14,7 +14,6 @@ from routers.pages import router as pages_router
 from routers.search import router as search_router
 from routers.tools import router as tools_router
 from services.document_parser_service import resume_pending_document_jobs
-from services.document_service import resume_pending_document_deletions
 
 
 app = FastAPI(title="Китобхо API")
@@ -31,7 +30,6 @@ if STATIC_DIR.exists():
 def _startup_init_db() -> None:
     init_db()
     resume_pending_document_jobs()
-    resume_pending_document_deletions()
 
 
 app.include_router(pages_router)

@@ -27,7 +27,8 @@ class WordlistService:
     ) -> dict:
         word_col = func.lower(Word.word).label("word")
         count_col = func.count(Word.id).label("count")
-        statement = select(word_col, count_col)
+        statement = select(word_col, count_col).join(Document, Document.id == Word.document_id)
+        statement = statement.where(Document.deleted_at.is_(None))
         if document_id is not None:
             statement = statement.where(Word.document_id == document_id)
         statement = statement.group_by(word_col).having(func.count(Word.id) >= min_freq)
@@ -87,7 +88,7 @@ class ConcordanceService:
             .join(Sentence, Sentence.id == Word.sentence_id)
             .join(Paragraph, Paragraph.id == Sentence.paragraph_id)
             .join(Document, Document.id == Word.document_id)
-            .where(condition)
+            .where(Document.deleted_at.is_(None), condition)
             .order_by(Document.filename, Paragraph.paragraph_index, Sentence.sentence_index, Word.word_index)
         )
         if document_id is not None:
@@ -180,7 +181,9 @@ class NgramsService:
         if document_id is not None:
             stmt = (
                 select(DocumentNgram.ngram, DocumentNgram.count)
+                .join(Document, Document.id == DocumentNgram.document_id)
                 .where(
+                    Document.deleted_at.is_(None),
                     DocumentNgram.document_id == document_id,
                     DocumentNgram.n == n,
                     DocumentNgram.count >= min_freq,
@@ -194,7 +197,8 @@ class NgramsService:
             count_col = func.sum(DocumentNgram.count).label("count")
             stmt = (
                 select(DocumentNgram.ngram, count_col)
-                .where(DocumentNgram.n == n)
+                .join(Document, Document.id == DocumentNgram.document_id)
+                .where(Document.deleted_at.is_(None), DocumentNgram.n == n)
                 .group_by(DocumentNgram.ngram)
                 .having(count_col >= min_freq)
                 .order_by(count_col.desc(), DocumentNgram.ngram.asc())
@@ -215,23 +219,47 @@ class NgramsService:
     def ensure_materialized(self, *, document_id: int | None) -> None:
         if document_id is not None:
             ngram_count = self._db.scalar(
-                select(func.count(DocumentNgram.id)).where(DocumentNgram.document_id == document_id)
+                select(func.count(DocumentNgram.id))
+                .join(Document, Document.id == DocumentNgram.document_id)
+                .where(Document.deleted_at.is_(None), DocumentNgram.document_id == document_id)
             )
             if int(ngram_count or 0) > 0:
                 return
 
-            word_count = self._db.scalar(select(func.count(Word.id)).where(Word.document_id == document_id))
+            word_count = self._db.scalar(
+                select(func.count(Word.id))
+                .join(Document, Document.id == Word.document_id)
+                .where(Document.deleted_at.is_(None), Word.document_id == document_id)
+            )
             if int(word_count or 0) > 0:
                 self.rebuild_for_document(document_id=document_id)
             return
 
-        word_doc_ids = set(self._db.scalars(select(Word.document_id).group_by(Word.document_id)).all())
-        ngram_doc_ids = set(self._db.scalars(select(DocumentNgram.document_id).group_by(DocumentNgram.document_id)).all())
+        word_doc_ids = set(
+            self._db.scalars(
+                select(Word.document_id)
+                .join(Document, Document.id == Word.document_id)
+                .where(Document.deleted_at.is_(None))
+                .group_by(Word.document_id)
+            ).all()
+        )
+        ngram_doc_ids = set(
+            self._db.scalars(
+                select(DocumentNgram.document_id)
+                .join(Document, Document.id == DocumentNgram.document_id)
+                .where(Document.deleted_at.is_(None))
+                .group_by(DocumentNgram.document_id)
+            ).all()
+        )
         for missing_document_id in sorted(word_doc_ids - ngram_doc_ids):
             self.rebuild_for_document(document_id=int(missing_document_id))
 
     def rebuild_for_document(self, *, document_id: int) -> int:
-        stmt = select(Word.sentence_id, Word.word_index, Word.word).where(Word.document_id == document_id)
+        stmt = (
+            select(Word.sentence_id, Word.word_index, Word.word)
+            .join(Document, Document.id == Word.document_id)
+            .where(Document.deleted_at.is_(None), Word.document_id == document_id)
+        )
         stmt = stmt.order_by(Word.sentence_id, Word.word_index)
         rows = self._db.execute(stmt).all()
 
@@ -348,6 +376,7 @@ class NgramSearchService:
             DocumentNgram.ngram_hash == _ngram_hash(normalized),
             DocumentNgram.ngram == normalized,
         )
+        stmt = stmt.join(Document, Document.id == DocumentNgram.document_id).where(Document.deleted_at.is_(None))
         if document_id is not None:
             stmt = stmt.where(DocumentNgram.document_id == document_id)
         rows = self._db.execute(stmt).all()
@@ -360,7 +389,11 @@ class NgramSearchService:
         return counts_by_doc, total
 
     def _search_partial(self, *, tokens: list[str], n: int, document_id: int | None) -> tuple[dict[int, int], int]:
-        stmt = select(DocumentNgram.document_id, DocumentNgram.ngram, DocumentNgram.count).where(DocumentNgram.n == n)
+        stmt = (
+            select(DocumentNgram.document_id, DocumentNgram.ngram, DocumentNgram.count)
+            .join(Document, Document.id == DocumentNgram.document_id)
+            .where(Document.deleted_at.is_(None), DocumentNgram.n == n)
+        )
         if document_id is not None:
             stmt = stmt.where(DocumentNgram.document_id == document_id)
         for token in tokens:

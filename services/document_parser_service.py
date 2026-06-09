@@ -309,7 +309,7 @@ class DocumentParserService:
             raise RuntimeError("Database session is required for run_full_processing_for_document().")
 
         document = self._db.get(Document, document_id)
-        if document is None or document.status == "parsed":
+        if document is None or document.deleted_at is not None or document.status == "parsed":
             return
 
         document.status = "processing"
@@ -330,7 +330,7 @@ class DocumentParserService:
             raise RuntimeError("Database session is required for run_ai_processing_for_document().")
 
         document = self._db.get(Document, document_id)
-        if document is None or document.status != "parsed":
+        if document is None or document.deleted_at is not None or document.status != "parsed":
             return
 
         if not EmbeddingService.is_configured():
@@ -675,10 +675,11 @@ def resume_pending_document_jobs() -> None:
     db = SessionLocal()
     try:
         parse_document_ids = db.scalars(
-            select(Document.id).where(Document.status.in_(("uploaded", "processing")))
+            select(Document.id).where(Document.deleted_at.is_(None), Document.status.in_(("uploaded", "processing")))
         ).all()
         ai_document_ids = db.scalars(
             select(Document.id).where(
+                Document.deleted_at.is_(None),
                 Document.status == "parsed",
                 Document.ai_status.in_(("pending", "processing")),
             )
