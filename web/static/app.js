@@ -7,7 +7,7 @@ const state = {
   selectedDoc: null,
   activeView: "search",
   activeTab: "text",
-  focus: null, // { documentId, paragraphIndex, sentenceIndex, query }
+  focus: null, // { documentId, paragraphIndex, paragraphEndIndex, sentenceIndex, query, text }
   wordFreqByDocId: new Map(),
   docsPollTimer: null,
   renderLimits: {
@@ -463,23 +463,33 @@ function renderDocSummary(doc) {
 
 function renderDocText(doc) {
   const focus = state.focus;
-  if (focus && Number(focus.documentId) === Number(doc?.id) && focus.paragraphIndex != null) {
+  if (focus && Number(focus.documentId) === Number(doc?.id) && (focus.paragraphIndex != null || focus.text)) {
     const paragraphs = Array.isArray(doc?.paragraphs) ? doc.paragraphs : [];
     const indices = paragraphs
       .map((x) => Number(x?.paragraph_index))
       .filter((n) => Number.isFinite(n))
       .sort((a, b) => a - b);
-    const p = paragraphs.find((x) => Number(x?.paragraph_index) === Number(focus.paragraphIndex));
-    const text = String(p?.text || "").trim();
+    const focusedIndex = focus.paragraphIndex != null ? Number(focus.paragraphIndex) : null;
+    const p = focusedIndex != null ? paragraphs.find((x) => Number(x?.paragraph_index) === focusedIndex) : null;
+    const text = String(focus.text || p?.text || "").trim();
     if (text) {
-      const pos = indices.length ? indices.indexOf(Number(focus.paragraphIndex)) + 1 : 0;
+      const pos = focusedIndex != null && indices.length ? indices.indexOf(focusedIndex) + 1 : 0;
       const counter = pos > 0 ? ` (${pos}/${indices.length})` : "";
       const prev = pos > 1 ? indices[pos - 2] : null;
-      const next = pos > 0 && pos < indices.length ? indices[pos] : null;
+      const endIndex = focus.paragraphEndIndex != null ? Number(focus.paragraphEndIndex) : focusedIndex;
+      const next =
+        pos > 0 && pos < indices.length && endIndex != null ? indices.find((idx) => idx > endIndex) || null : null;
+      const paragraphLabel =
+        focusedIndex == null
+          ? "Натиҷаи семантикӣ"
+          : focus.paragraphEndIndex != null && Number(focus.paragraphEndIndex) !== focusedIndex
+          ? `${focus.paragraphIndex}-${focus.paragraphEndIndex}`
+          : String(focus.paragraphIndex);
+      const focusLabel = focusedIndex == null ? paragraphLabel : `Абзац ${paragraphLabel}`;
 
       return `
         <div class="focusbar">
-          <div class="focusbar__meta">Абзац ${escapeHtml(focus.paragraphIndex)}${escapeHtml(counter)}</div>
+          <div class="focusbar__meta">${escapeHtml(focusLabel)}${escapeHtml(counter)}</div>
           <div class="row">
             <button class="btn btn--sm" type="button" data-focus="prev" ${prev == null ? "disabled" : ""}>←</button>
             <button class="btn btn--sm" type="button" data-focus="next" ${next == null ? "disabled" : ""}>→</button>
@@ -689,8 +699,10 @@ function onDocBodyClick(e) {
   setFocusForSelectedDoc({
     documentId: focus.documentId,
     paragraphIndex: nextIndex,
+    paragraphEndIndex: nextIndex,
     sentenceIndex: null,
     query: focus.query,
+    text: null,
   });
 }
 
@@ -756,6 +768,7 @@ function renderResults(data, query) {
     const semanticWhere = [p].filter(Boolean).join(" • ");
     const finalWhere = target === "semantic" ? semanticWhere || where : where;
     const resultText = target === "semantic" ? String(r.text || r.paragraph_text || r.chunk_text || "") : String(r.text || "");
+    const focusText = target === "semantic" ? resultText : null;
 
     const card = document.createElement("button");
     card.type = "button";
@@ -772,8 +785,10 @@ function renderResults(data, query) {
         focus: {
           documentId: r.document_id,
           paragraphIndex: r.paragraph_index,
+          paragraphEndIndex: target === "semantic" ? r.paragraph_end_index || r.paragraph_index : r.paragraph_index,
           sentenceIndex: r.sentence_index,
           query,
+          text: focusText,
         },
       })
     );
