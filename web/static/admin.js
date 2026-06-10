@@ -12,6 +12,11 @@
     viewUsers: document.getElementById("viewUsers"),
     viewFiles: document.getElementById("viewFiles"),
     viewAiLogs: document.getElementById("viewAiLogs"),
+    createUserForm: document.getElementById("createUserForm"),
+    createUserEmail: document.getElementById("createUserEmail"),
+    createUserPassword: document.getElementById("createUserPassword"),
+    createUserRole: document.getElementById("createUserRole"),
+    createUserBtn: document.getElementById("createUserBtn"),
     usersMeta: document.getElementById("usersMeta"),
     usersTbody: document.getElementById("usersTbody"),
     filesMeta: document.getElementById("filesMeta"),
@@ -259,6 +264,37 @@
     renderAiLogs();
   }
 
+  async function onCreateUser(e) {
+    e.preventDefault();
+    if (!els.createUserEmail || !els.createUserPassword || !els.createUserRole || !els.createUserBtn) return;
+
+    const email = String(els.createUserEmail.value || "").trim();
+    const password = String(els.createUserPassword.value || "");
+    const role = String(els.createUserRole.value || "").trim();
+    if (!email || !password || !role) {
+      Auth.toast("Заполните e-mail, пароль и роль.", "warning");
+      return;
+    }
+
+    els.createUserBtn.disabled = true;
+    els.createUserBtn.textContent = "Создание...";
+    try {
+      await Auth.fetchJson("/admin/users", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password, role }),
+      });
+      Auth.toast("Пользователь создан.", "success");
+      if (els.createUserForm) els.createUserForm.reset();
+      await refreshUsers();
+    } catch (err) {
+      Auth.toast(String(err?.message || err || "Не удалось создать пользователя"), "error");
+    } finally {
+      els.createUserBtn.disabled = false;
+      els.createUserBtn.textContent = "Создать";
+    }
+  }
+
   async function onSave(userIdRaw) {
     const userId = Number(userIdRaw || 0);
     if (!userId) return;
@@ -321,6 +357,7 @@
       if (els.tabUsers) els.tabUsers.addEventListener("click", () => setView("users"));
       if (els.tabFiles) els.tabFiles.addEventListener("click", () => setView("files"));
       if (els.tabAiLogs) els.tabAiLogs.addEventListener("click", () => setView("aiLogs"));
+      if (els.createUserForm) els.createUserForm.addEventListener("submit", onCreateUser);
 
       await refreshUsers();
       setView(activeView);

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from routers.dependencies import get_current_user, require_admin, validate_role
-from routers.schemas import LoginRequest, RegisterRequest, RoleUpdateRequest
+from routers.schemas import AdminCreateUserRequest, LoginRequest, RegisterRequest, RoleUpdateRequest
 from services.ai_log_service import AiLogService
 from services.auth_service import AuthService
 
@@ -34,6 +34,16 @@ def me(current_user=Depends(get_current_user)) -> dict:
 @router.get("/admin/users")
 def admin_list_users(db: Session = Depends(get_db), _=Depends(require_admin)) -> list[dict]:
     return AuthService(db).list_users()
+
+
+@router.post("/admin/users")
+def admin_create_user(
+    payload: AdminCreateUserRequest,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+) -> dict:
+    role = validate_role(payload.role)
+    return AuthService(db).create_user(email=payload.email, password=payload.password, role=role)
 
 
 @router.put("/admin/users/{user_id}/role")

@@ -21,6 +21,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AdminCreateUserRequest(BaseModel):
+    email: str
+    password: str
+    role: str
+
+
 class RoleUpdateRequest(BaseModel):
     role: str
 

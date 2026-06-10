@@ -45,6 +45,25 @@
             <h3 class="panel__title">Пользователи</h3>
             <div class="panel__hint" id="usersMeta">—</div>
           </div>
+          <form id="createUserForm" class="toolform admin-create-user">
+            <label class="field toolform__wide">
+              <span class="field__label">E-mail</span>
+              <input id="createUserEmail" class="input" type="email" autocomplete="off" required maxlength="255" />
+            </label>
+            <label class="field">
+              <span class="field__label">Пароль</span>
+              <input id="createUserPassword" class="input" type="password" autocomplete="new-password" required minlength="6" />
+            </label>
+            <label class="field">
+              <span class="field__label">Роль</span>
+              <select id="createUserRole" class="select">
+                <option value="user" selected>user</option>
+                <option value="moderator">moderator</option>
+                <option value="admin">admin</option>
+              </select>
+            </label>
+            <button id="createUserBtn" class="btn btn--primary" type="submit">Создать</button>
+          </form>
           <div class="tablewrap admin-tablewrap">
             <table class="table" aria-label="Таблица пользователей">
               <thead>
@@ -106,6 +125,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="/static/auth.js?v=20260415-3"></script>
-    <script src="/static/admin.js?v=20260415-4"></script>
+    <script src="/static/admin.js?v=20260610-1"></script>
   </body>
 </html>
