@@ -5,12 +5,14 @@ import logging
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 from uuid import uuid4
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from database import (
@@ -36,6 +38,7 @@ NGRAM_MIN_N = 2
 NGRAM_MAX_N = 5
 WORD_INSERT_BATCH_SIZE = 5000
 NGRAM_INSERT_BATCH_SIZE = 2000
+DB_WRITE_RETRY_ATTEMPTS = 3
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +53,58 @@ def _add_sentence_ngrams(tokens: list[str], counts: Counter[tuple[int, str]]) ->
         for index in range(0, len(tokens) - n + 1):
             ngram = " ".join(tokens[index : index + n])
             counts[(n, ngram)] += 1
+
+
+def _is_lock_wait_error(exc: OperationalError) -> bool:
+    code = None
+    orig = getattr(exc, "orig", None)
+    args = getattr(orig, "args", None)
+    if args:
+        code = args[0]
+    return code in {1205, 1213}
+
+
+def _run_db_write_with_retry(
+    db: Session,
+    write_fn,
+    *,
+    operation: str,
+    document_id: int | None,
+) -> None:
+    for attempt in range(1, DB_WRITE_RETRY_ATTEMPTS + 1):
+        try:
+            write_fn()
+            db.commit()
+            return
+        except OperationalError as exc:
+            db.rollback()
+            if _is_lock_wait_error(exc) and attempt < DB_WRITE_RETRY_ATTEMPTS:
+                logger.warning(
+                    "%s_retry document_id=%s attempt=%s error=%s",
+                    operation,
+                    document_id,
+                    attempt,
+                    exc,
+                )
+                time.sleep(1.5 * attempt)
+                continue
+            logger.exception("%s_failed document_id=%s", operation, document_id)
+            raise
+        except Exception:
+            db.rollback()
+            logger.exception("%s_failed document_id=%s", operation, document_id)
+            raise
+
+
+def _create_ai_log(**kwargs) -> None:
+    db = SessionLocal()
+    try:
+        AiLogService(db).create(**kwargs)
+    except Exception:
+        db.rollback()
+        logger.warning("ai_log_write_failed operation=%s", kwargs.get("operation"), exc_info=True)
+    finally:
+        db.close()
 
 
 class DocumentParserService:
@@ -339,7 +394,7 @@ class DocumentParserService:
             document.error_message = message
             self._db.add(document)
             self._db.commit()
-            AiLogService(self._db).create(
+            _create_ai_log(
                 operation="ai_processing",
                 status="error",
                 document_id=document.id,
@@ -379,7 +434,12 @@ class DocumentParserService:
         if not chunks:
             return 0
 
-        self._db.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).delete()
+        _run_db_write_with_retry(
+            self._db,
+            lambda: self._db.query(DocumentChunk).filter(DocumentChunk.document_id == document.id).delete(),
+            operation="delete_document_chunks",
+            document_id=document.id,
+        )
 
         embedding_service = None
         if EmbeddingService.is_configured():
@@ -398,7 +458,7 @@ class DocumentParserService:
                     result = embedding_service.get_embedding_result(chunk_text)
                     embedding_json = json.dumps(result.embedding, separators=(",", ":"))
                     embedding_model = result.model
-                    AiLogService(self._db).create(
+                    _create_ai_log(
                         operation="embedding_chunk",
                         status="success",
                         document_id=document.id,
@@ -412,7 +472,7 @@ class DocumentParserService:
                 except Exception as exc:
                     embedding_json = None
                     embedding_model = started_model
-                    AiLogService(self._db).create(
+                    _create_ai_log(
                         operation="embedding_chunk",
                         status="error",
                         document_id=document.id,
@@ -421,18 +481,21 @@ class DocumentParserService:
                         error_message=str(exc),
                     )
 
-            self._db.add(
-                DocumentChunk(
-                    document_id=document.id,
-                    chunk_index=chunk_index,
-                    chunk_text=chunk_text,
-                    embedding=embedding_json,
-                    embedding_model=embedding_model,
-                )
+            chunk = DocumentChunk(
+                document_id=document.id,
+                chunk_index=chunk_index,
+                chunk_text=chunk_text,
+                embedding=embedding_json,
+                embedding_model=embedding_model,
+            )
+            _run_db_write_with_retry(
+                self._db,
+                lambda chunk=chunk: self._db.add(chunk),
+                operation="insert_document_chunk",
+                document_id=document.id,
             )
             created += 1
 
-        self._db.commit()
         return created
 
     def index_document_paragraphs(self, *, document: Document) -> int:
@@ -445,7 +508,14 @@ class DocumentParserService:
         if not paragraphs:
             return 0
 
-        self._db.query(ParagraphEmbeddingBlock).filter(ParagraphEmbeddingBlock.document_id == document.id).delete()
+        _run_db_write_with_retry(
+            self._db,
+            lambda: self._db.query(ParagraphEmbeddingBlock)
+            .filter(ParagraphEmbeddingBlock.document_id == document.id)
+            .delete(),
+            operation="delete_paragraph_embedding_blocks",
+            document_id=document.id,
+        )
 
         embedding_service = None
         if EmbeddingService.is_configured():
@@ -460,6 +530,12 @@ class DocumentParserService:
             paragraph.embedding = None
             paragraph.embedding_model = None
             self._db.add(paragraph)
+        _run_db_write_with_retry(
+            self._db,
+            lambda: None,
+            operation="clear_paragraph_embeddings",
+            document_id=document.id,
+        )
 
         for block_index, block in enumerate(blocks, start=1):
             embedding_json = None
@@ -470,7 +546,7 @@ class DocumentParserService:
                     result = embedding_service.get_embedding_result(block["text"])
                     embedding_json = json.dumps(result.embedding, separators=(",", ":"))
                     embedding_model = result.model
-                    AiLogService(self._db).create(
+                    _create_ai_log(
                         operation="embedding_paragraph_block",
                         status="success",
                         document_id=document.id,
@@ -486,7 +562,7 @@ class DocumentParserService:
                     )
                 except Exception as exc:
                     embedding_model = started_model
-                    AiLogService(self._db).create(
+                    _create_ai_log(
                         operation="embedding_paragraph_block",
                         status="error",
                         document_id=document.id,
@@ -495,20 +571,23 @@ class DocumentParserService:
                         error_message=str(exc),
                     )
 
-            self._db.add(
-                ParagraphEmbeddingBlock(
-                    document_id=document.id,
-                    block_index=block_index,
-                    start_paragraph_index=block["start_paragraph_index"],
-                    end_paragraph_index=block["end_paragraph_index"],
-                    block_text=block["text"],
-                    embedding=embedding_json,
-                    embedding_model=embedding_model,
-                )
+            paragraph_block = ParagraphEmbeddingBlock(
+                document_id=document.id,
+                block_index=block_index,
+                start_paragraph_index=block["start_paragraph_index"],
+                end_paragraph_index=block["end_paragraph_index"],
+                block_text=block["text"],
+                embedding=embedding_json,
+                embedding_model=embedding_model,
+            )
+            _run_db_write_with_retry(
+                self._db,
+                lambda paragraph_block=paragraph_block: self._db.add(paragraph_block),
+                operation="insert_paragraph_embedding_block",
+                document_id=document.id,
             )
             created += 1
 
-        self._db.commit()
         return created
 
     def _build_paragraph_blocks(self, paragraphs: list[Paragraph]) -> list[dict[str, int | str]]:

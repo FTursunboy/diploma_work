@@ -20,6 +20,7 @@ services:
       - ./auth.py:/app/auth.py
       - ./routers:/app/routers
       - ./services:/app/services
+      - ./scripts:/app/scripts
       - ./storage:/app/storage
     depends_on:
       - db
